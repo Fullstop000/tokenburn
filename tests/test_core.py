@@ -42,10 +42,28 @@ class TaskStateStoreTests(unittest.TestCase):
             store = TaskStateStore(state_path)
             run_at = datetime(2026, 3, 4, 0, 0, tzinfo=timezone.utc)
 
-            store.mark_run(task_name="demo", run_at=run_at)
-            loaded = TaskStateStore(state_path).get_last_run("demo")
+            store.mark_run(task_name="demo", run_at=run_at, duration_seconds=1.25)
+            loaded_store = TaskStateStore(state_path)
+            loaded = loaded_store.get_last_run("demo")
 
             self.assertEqual(run_at, loaded)
+            self.assertEqual(1, loaded_store.get_run_count("demo"))
+            self.assertAlmostEqual(1.25, loaded_store.get_total_duration_seconds("demo"), places=2)
+
+    def test_accumulates_iteration_and_duration(self) -> None:
+        """Multiple successful runs should accumulate count and elapsed seconds."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            state_path = Path(temp_dir) / "state.json"
+            store = TaskStateStore(state_path)
+            first = datetime(2026, 3, 4, 0, 0, tzinfo=timezone.utc)
+            second = datetime(2026, 3, 4, 0, 1, tzinfo=timezone.utc)
+
+            store.mark_run(task_name="demo", run_at=first, duration_seconds=0.5)
+            store.mark_run(task_name="demo", run_at=second, duration_seconds=2.0)
+
+            self.assertEqual(second, store.get_last_run("demo"))
+            self.assertEqual(2, store.get_run_count("demo"))
+            self.assertAlmostEqual(2.5, store.get_total_duration_seconds("demo"), places=2)
 
     def test_returns_none_for_unknown_task(self) -> None:
         """Unknown tasks should not crash and should return empty state."""
@@ -66,6 +84,18 @@ class TaskStateStoreTests(unittest.TestCase):
 
             data = json.loads(state_path.read_text(encoding="utf-8"))
             self.assertIn("demo", data)
+
+    def test_reads_legacy_string_format(self) -> None:
+        """Legacy timestamp-only payload should be read and normalized safely."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            state_path = Path(temp_dir) / "state.json"
+            run_at = datetime(2026, 3, 4, 0, 0, tzinfo=timezone.utc)
+            state_path.write_text(json.dumps({"demo": run_at.isoformat()}), encoding="utf-8")
+            store = TaskStateStore(state_path)
+
+            self.assertEqual(run_at, store.get_last_run("demo"))
+            self.assertEqual(1, store.get_run_count("demo"))
+            self.assertAlmostEqual(0.0, store.get_total_duration_seconds("demo"), places=2)
 
 
 class ReportWriterTests(unittest.TestCase):

@@ -137,7 +137,7 @@ def render_dashboard_html() -> str:
     @media (max-width: 760px) {
       body { padding: 12px; }
       .hero h1 { font-size: 22px; }
-      th:nth-child(3), td:nth-child(3), th:nth-child(6), td:nth-child(6) { display: none; }
+      th:nth-child(7), td:nth-child(7), th:nth-child(8), td:nth-child(8) { display: none; }
     }
   </style>
 </head>
@@ -157,6 +157,8 @@ def render_dashboard_html() -> str:
             <th>Task</th>
             <th>Group</th>
             <th>Status</th>
+            <th>Iteration</th>
+            <th>Elapsed(s)</th>
             <th>Progress</th>
             <th>Updated</th>
             <th>Details</th>
@@ -196,6 +198,8 @@ def render_dashboard_html() -> str:
           <td><strong>${task.title || task.id}</strong><div class=\"tiny\">${task.id}</div></td>
           <td>${task.group || '-'}</td>
           <td><span class=\"${statusClass(task.status)}\">${task.status || 'unknown'}</span></td>
+          <td>${task.iteration || 0}</td>
+          <td>${Number(task.elapsed_seconds || 0).toFixed(2)}</td>
           <td>${task.progress || '-'}</td>
           <td class=\"tiny\">${task.updated_at || '-'}</td>
           <td class=\"tiny\">${task.details || '-'}</td>
@@ -291,10 +295,10 @@ def serve_control_plane(
 
 
 # Build rows describing autonomous runtime current and pending actions.
-def _build_autonomous_tasks(autonomous_state_path: Path) -> List[Dict[str, str]]:
+def _build_autonomous_tasks(autonomous_state_path: Path) -> List[Dict[str, object]]:
     """Return autonomous task rows from persisted runtime state."""
     state = AutonomousStateStore(autonomous_state_path).load()
-    rows: List[Dict[str, str]] = []
+    rows: List[Dict[str, object]] = []
 
     title = state.current_task or state.active_goal or "Autonomous Goal"
     progress = "{completed}/{total}".format(
@@ -307,6 +311,8 @@ def _build_autonomous_tasks(autonomous_state_path: Path) -> List[Dict[str, str]]
             "title": title,
             "group": "autonomous",
             "status": state.status or "idle",
+            "iteration": state.current_task_iteration,
+            "elapsed_seconds": state.current_task_elapsed_seconds,
             "progress": progress,
             "updated_at": state.updated_at or "-",
             "details": state.last_cycle_observations[:200] if state.last_cycle_observations else "-",
@@ -328,6 +334,8 @@ def _build_autonomous_tasks(autonomous_state_path: Path) -> List[Dict[str, str]]
                 "title": action_title,
                 "group": "autonomous",
                 "status": "pending",
+                "iteration": state.current_task_iteration,
+                "elapsed_seconds": state.current_task_elapsed_seconds,
                 "progress": f"{index}/{len(state.pending_actions)}",
                 "updated_at": state.updated_at or "-",
                 "details": state.pending_rationale or "-",
@@ -338,10 +346,10 @@ def _build_autonomous_tasks(autonomous_state_path: Path) -> List[Dict[str, str]]
 
 
 # Build rows describing legacy fixed tasks and due status.
-def _build_legacy_tasks(legacy_state_path: Path, now: datetime) -> List[Dict[str, str]]:
+def _build_legacy_tasks(legacy_state_path: Path, now: datetime) -> List[Dict[str, object]]:
     """Return legacy task rows by comparing last run time and intervals."""
     store = TaskStateStore(legacy_state_path)
-    rows: List[Dict[str, str]] = []
+    rows: List[Dict[str, object]] = []
 
     for task in build_default_tasks():
         last_run = store.get_last_run(task.name)
@@ -361,6 +369,8 @@ def _build_legacy_tasks(legacy_state_path: Path, now: datetime) -> List[Dict[str
                 "title": task.name,
                 "group": "legacy",
                 "status": status,
+                "iteration": store.get_run_count(task.name),
+                "elapsed_seconds": store.get_total_duration_seconds(task.name),
                 "progress": "-",
                 "updated_at": updated_at,
                 "details": details,

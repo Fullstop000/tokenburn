@@ -179,6 +179,8 @@ class AutonomousAgentTests(unittest.TestCase):
             self.assertEqual("completed", state.status)
             self.assertEqual(1, state.progress_completed_actions)
             self.assertEqual(1, state.progress_total_actions)
+            self.assertEqual(1, state.current_task_iteration)
+            self.assertGreaterEqual(state.current_task_elapsed_seconds, 0.0)
             self.assertEqual(1, state.cycle_count)
             self.assertEqual(1, len(executor.actions))
 
@@ -234,6 +236,8 @@ class AutonomousAgentTests(unittest.TestCase):
             self.assertEqual("running", state_after_fail.status)
             self.assertEqual(0, state_after_fail.progress_completed_actions)
             self.assertEqual(2, state_after_fail.progress_total_actions)
+            self.assertEqual(1, state_after_fail.current_task_iteration)
+            self.assertGreaterEqual(state_after_fail.current_task_elapsed_seconds, 0.0)
 
             resume_executor = _FakeExecutor()
             resumed_agent = AutonomousAgent(
@@ -251,6 +255,8 @@ class AutonomousAgentTests(unittest.TestCase):
             self.assertEqual("completed", final_state.status)
             self.assertEqual(2, final_state.progress_completed_actions)
             self.assertEqual(2, final_state.progress_total_actions)
+            self.assertEqual(1, final_state.current_task_iteration)
+            self.assertGreaterEqual(final_state.current_task_elapsed_seconds, 0.0)
             self.assertEqual(1, final_state.cycle_count)
             self.assertEqual(1, planner.call_count)
             self.assertGreaterEqual(len(resume_executor.actions), 1)

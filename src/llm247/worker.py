@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -83,13 +84,19 @@ class ContinuousWorker:
                 if not prompt.strip():
                     raise ValueError("prompt must not be empty")
 
+                task_started_at = time.monotonic()
                 output = self.model_client.generate_text(prompt)
                 report_path = self.report_writer.write(
                     task_name=task.name,
                     content=output,
                     generated_at=run_at,
                 )
-                self.state_store.mark_run(task_name=task.name, run_at=run_at)
+                duration_seconds = max(0.0, time.monotonic() - task_started_at)
+                self.state_store.mark_run(
+                    task_name=task.name,
+                    run_at=run_at,
+                    duration_seconds=duration_seconds,
+                )
                 generated_reports.append(report_path)
             except Exception as error:  # pragma: no cover - logging path
                 self.logger.exception("task '%s' failed: %s", task.name, error)

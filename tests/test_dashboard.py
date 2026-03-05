@@ -25,6 +25,8 @@ class DashboardSnapshotTests(unittest.TestCase):
                 AutonomousState(
                     active_goal="Sort TODO backlog",
                     current_task="Sort TODO backlog",
+                    current_task_iteration=3,
+                    current_task_elapsed_seconds=12.5,
                     progress_completed_actions=1,
                     progress_total_actions=3,
                     status="running",
@@ -41,8 +43,9 @@ class DashboardSnapshotTests(unittest.TestCase):
 
             legacy_store = TaskStateStore(legacy_state_path)
             now = datetime(2026, 3, 4, 0, 0, tzinfo=timezone.utc)
-            legacy_store.mark_run("engineering_watchdog", now - timedelta(minutes=45))
-            legacy_store.mark_run("token_efficiency_guard", now - timedelta(minutes=30))
+            legacy_store.mark_run("engineering_watchdog", now - timedelta(minutes=45), duration_seconds=1.2)
+            legacy_store.mark_run("engineering_watchdog", now - timedelta(minutes=40), duration_seconds=0.8)
+            legacy_store.mark_run("token_efficiency_guard", now - timedelta(minutes=30), duration_seconds=2.3)
 
             snapshot = build_task_snapshot(
                 workspace_path=workspace,
@@ -60,12 +63,18 @@ class DashboardSnapshotTests(unittest.TestCase):
             autonomous_current = next(task for task in snapshot["tasks"] if task["id"] == "autonomous.current")
             self.assertEqual("running", autonomous_current["status"])
             self.assertEqual("1/3", autonomous_current["progress"])
+            self.assertEqual(3, autonomous_current["iteration"])
+            self.assertAlmostEqual(12.5, autonomous_current["elapsed_seconds"], places=2)
 
             legacy_watchdog = next(task for task in snapshot["tasks"] if task["id"] == "legacy.engineering_watchdog")
             self.assertEqual("due", legacy_watchdog["status"])
+            self.assertEqual(2, legacy_watchdog["iteration"])
+            self.assertAlmostEqual(2.0, legacy_watchdog["elapsed_seconds"], places=2)
 
             legacy_efficiency = next(task for task in snapshot["tasks"] if task["id"] == "legacy.token_efficiency_guard")
             self.assertEqual("waiting", legacy_efficiency["status"])
+            self.assertEqual(1, legacy_efficiency["iteration"])
+            self.assertAlmostEqual(2.3, legacy_efficiency["elapsed_seconds"], places=2)
 
     def test_handles_missing_state_files(self) -> None:
         """Snapshot generation should not fail when state files are absent."""

@@ -1,0 +1,27 @@
+{constitution_section}
+
+## Deep Module Review
+Target: {target}
+
+You are performing a thorough engineering review of the code below — the kind of review a senior engineer would do before a major release.
+
+## Code
+{code_context}
+
+## Review Dimensions
+Examine the code through each of these lenses, in order of priority:
+
+1. **Architectural integrity** — Is responsibility clearly separated? Are module boundaries clean? Is coupling minimal?
+2. **Code quality** — Is there duplication, unnecessary complexity, or misleading naming?
+3. **Robustness** — Are error paths handled? Are edge cases and boundary conditions covered?
+4. **Testability** — Can this code be tested in isolation? Are dependencies injectable?
+5. **Performance** — Are there obvious inefficiencies, unnecessary allocations, or O(n²) traps?
+
+## Output Requirements
+- Produce 1–3 improvement tasks.
+- Each task must be **specific to a file and function** — never generic advice.
+- Prioritize issues that compound over time (architectural debt > cosmetic issues).
+- If the code is genuinely clean, say so — do not fabricate issues.
+
+## Output Format (strict JSON)
+{{"tasks": [{{"title": "concise imperative title", "description": "file, function, what to change, and why it matters", "priority": 1-5}}]}}
