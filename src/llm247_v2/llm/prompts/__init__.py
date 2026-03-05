@@ -15,7 +15,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Dict, Optional
 
-logger = logging.getLogger("llm247_v2.prompts")
+logger = logging.getLogger("llm247_v2.llm.prompts")
 
 _PROMPTS_DIR = Path(__file__).parent
 

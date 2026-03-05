@@ -2,9 +2,9 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from llm247_v2.executor import PlanExecutor, format_execution_log
-from llm247_v2.models import Directive, PlanStep, TaskPlan
-from llm247_v2.safety import SafetyPolicy
+from llm247_v2.execution.executor import PlanExecutor, format_execution_log
+from llm247_v2.core.models import Directive, PlanStep, TaskPlan
+from llm247_v2.execution.safety import SafetyPolicy
 
 
 class TestPlanExecutor(unittest.TestCase):
@@ -129,7 +129,7 @@ class TestPlanExecutor(unittest.TestCase):
 
 class TestFormatExecutionLog(unittest.TestCase):
     def test_format(self):
-        from llm247_v2.executor import ExecutionResult
+        from llm247_v2.execution.executor import ExecutionResult
         results = [
             ExecutionResult(0, "create_file", "test.py", True, "wrote 100 bytes"),
             ExecutionResult(1, "run_command", "echo hi", True, "hi"),

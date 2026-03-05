@@ -1,6 +1,6 @@
 import unittest
 
-from llm247_v2.safety import SafetyPolicy
+from llm247_v2.execution.safety import SafetyPolicy
 
 
 class TestSafetyPolicy(unittest.TestCase):

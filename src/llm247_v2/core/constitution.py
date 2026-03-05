@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import List, Tuple
 
-logger = logging.getLogger("llm247_v2.constitution")
+logger = logging.getLogger("llm247_v2.core.constitution")
 
 IMMUTABLE_PATHS = frozenset({
     "constitution.md",

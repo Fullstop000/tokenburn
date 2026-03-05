@@ -1,6 +1,6 @@
 import unittest
 
-from llm247_v2.prompts import (
+from llm247_v2.llm.prompts import (
     _DefaultDict,
     get_template_source,
     list_templates,

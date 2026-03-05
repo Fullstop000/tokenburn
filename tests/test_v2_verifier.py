@@ -1,10 +1,10 @@
-"""Tests for llm247_v2.verifier — Post-execution verification checks."""
+"""Tests for llm247_v2.execution.verifier — Post-execution verification checks."""
 
 import tempfile
 import unittest
 from pathlib import Path
 
-from llm247_v2.verifier import (
+from llm247_v2.execution.verifier import (
     _check_lint,
     _check_no_secrets,
     _check_syntax,
@@ -112,7 +112,7 @@ class TestVerifyTask(unittest.TestCase):
 
 class TestFormatVerification(unittest.TestCase):
     def test_format(self):
-        from llm247_v2.verifier import CheckResult, VerificationResult
+        from llm247_v2.execution.verifier import CheckResult, VerificationResult
         result = VerificationResult(
             passed=True,
             checks=[CheckResult(name="syntax", passed=True, output="all OK")],

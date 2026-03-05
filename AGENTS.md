@@ -461,34 +461,56 @@ Curiosity without accountability is recklessness. Every action the agent takes i
 
 ```
 src/llm247_v2/
-├── agent.py             # Main orchestrator: the cycle loop
-├── models.py            # Core data models (Task, Directive, TaskPlan, CycleReport)
-├── store.py             # SQLite persistence (tasks, events, cycles)
-├── llm_client.py        # LLM protocol + Ark adapter + TokenTracker + AuditLogger
-├── constitution.py      # Immutable principles — the agent's DNA
-├── directive.py         # Runtime behavior control (paused, focus, forbidden paths)
-├── discovery.py         # Task discovery pipeline (8 strategies)
-├── exploration.py       # ExplorationMap — tracks what areas have been visited
-├── value.py             # Value assessment — heuristic + LLM scoring
-├── planner.py           # LLM-driven execution plan generation
-├── executor.py          # Safe action execution (edit, create, run, delete)
-├── verifier.py          # Post-execution verification (syntax, tests, secrets)
-├── git_ops.py           # Git workflow (worktree isolation, branch, commit, push, PR)
-├── safety.py            # Command allowlist + path protection
-├── experience.py        # Long-term memory — learnings from past tasks
-├── observer.py          # Centralized event system (log, JSONL, SQLite, console)
-├── interest.py          # Interest profile + Issue discovery (GitHub, dep audit, web search)
-├── prompts/             # All LLM prompt templates (7 .txt files)
-│   ├── __init__.py      # Template loader + renderer
-│   ├── plan_task.txt
-│   ├── assess_value.txt
-│   ├── extract_learnings.txt
-│   ├── discover_stale_area.txt
-│   ├── discover_deep_review.txt
-│   ├── discover_llm_guided.txt
-│   └── discover_web_search.txt
-├── dashboard.py         # HTTP control plane + Web UI
-└── __main__.py          # CLI entry point
+├── __init__.py              # Package summary and layout docs
+├── __main__.py              # CLI entry point (imports from submodules)
+├── agent.py                 # Main orchestrator: the cycle loop
+│
+├── core/                    # Shared base layer
+│   ├── __init__.py
+│   ├── models.py            # Core data models (Task, Directive, TaskPlan, CycleReport)
+│   ├── constitution.py      # Immutable principles — the agent's DNA
+│   └── directive.py         # Runtime behavior control (paused, focus, forbidden paths)
+│
+├── llm/                     # LLM client + prompt templates
+│   ├── __init__.py
+│   ├── client.py            # LLM protocol + Ark adapter + TokenTracker + AuditLogger
+│   └── prompts/
+│       ├── __init__.py      # Template loader + renderer
+│       ├── plan_task.txt
+│       ├── assess_value.txt
+│       ├── extract_learnings.txt
+│       ├── discover_stale_area.txt
+│       ├── discover_deep_review.txt
+│       ├── discover_llm_guided.txt
+│       └── discover_web_search.txt
+│
+├── storage/                 # SQLite persistence
+│   ├── __init__.py
+│   ├── store.py             # Tasks/events/cycles
+│   └── experience.py        # Long-term memory and learning extraction
+│
+├── observability/           # Event observation layer
+│   ├── __init__.py
+│   └── observer.py          # Centralized event system (log, JSONL, SQLite, console)
+│
+├── discovery/               # Task discovery pipeline
+│   ├── __init__.py
+│   ├── pipeline.py          # Strategy orchestration and candidate ranking
+│   ├── exploration.py       # ExplorationMap — tracks visited areas
+│   ├── value.py             # Value assessment — heuristic + LLM scoring
+│   └── interest.py          # Interest profile + issue discovery sources
+│
+├── execution/               # Planning and execution pipeline
+│   ├── __init__.py
+│   ├── planner.py           # LLM-driven execution plan generation
+│   ├── executor.py          # Safe action execution (edit, create, run, delete)
+│   ├── verifier.py          # Post-execution verification (syntax, tests, secrets)
+│   ├── git_ops.py           # Git workflow (worktree isolation, branch, commit, push, PR)
+│   └── safety.py            # Command allowlist + path protection
+│
+└── dashboard/               # HTTP control plane
+    ├── __init__.py
+    └── server.py            # Dashboard server and API
 ```
 
 ### The Cycle
@@ -610,7 +632,7 @@ The main workspace is never touched during execution. If the worktree creation f
 
 ### All LLM Prompts in `prompts/`
 
-**Rule:** Every string sent to the LLM as a prompt MUST be a template in `src/llm247_v2/prompts/*.txt`, rendered via `prompts.render()`. No inline prompt strings in Python code.
+**Rule:** Every string sent to the LLM as a prompt MUST be a template in `src/llm247_v2/llm/prompts/*.txt`, rendered via `prompts.render()`. No inline prompt strings in Python code.
 **Why:** Centralizes prompt management for easy auditing, iteration, and version control. All prompts are written in English.
 
 ### Git Workflow for Self-Modification

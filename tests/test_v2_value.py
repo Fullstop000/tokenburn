@@ -1,7 +1,7 @@
 import unittest
 
-from llm247_v2.models import Directive, Task, TaskSourceConfig
-from llm247_v2.value import (
+from llm247_v2.core.models import Directive, Task, TaskSourceConfig
+from llm247_v2.discovery.value import (
     TaskValue,
     assess_task_value_heuristic,
     format_value_log,
@@ -92,7 +92,7 @@ class TestSkipDiscovery(unittest.TestCase):
 
 class TestFormatValueLog(unittest.TestCase):
     def test_format(self):
-        from llm247_v2.value import ValueDimension
+        from llm247_v2.discovery.value import ValueDimension
         values = [
             TaskValue("abc12345", 0.75, [ValueDimension("impact", 0.8, "test")], "execute", True),
         ]

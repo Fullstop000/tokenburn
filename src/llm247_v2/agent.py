@@ -7,31 +7,31 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
-from llm247_v2.constitution import Constitution, load_constitution
-from llm247_v2.directive import load_directive
-from llm247_v2.discovery import discover_and_evaluate
-from llm247_v2.executor import PlanExecutor, format_execution_log
-from llm247_v2.experience import (
+from llm247_v2.core.constitution import Constitution, load_constitution
+from llm247_v2.core.directive import load_directive
+from llm247_v2.discovery.pipeline import discover_and_evaluate
+from llm247_v2.execution.executor import PlanExecutor, format_execution_log
+from llm247_v2.storage.experience import (
     ExperienceStore,
     extract_learnings,
     format_experiences_for_prompt,
     format_whats_learned,
 )
-from llm247_v2.exploration import load_exploration_map, save_exploration_map
-from llm247_v2.git_ops import GitOperationError, GitWorkflow
-from llm247_v2.interest import (
+from llm247_v2.discovery.exploration import load_exploration_map, save_exploration_map
+from llm247_v2.execution.git_ops import GitOperationError, GitWorkflow
+from llm247_v2.discovery.interest import (
     InterestProfile,
     build_interest_profile,
     load_interest_profile,
     save_interest_profile,
 )
-from llm247_v2.llm_client import BudgetExhaustedError, LLMClient, TokenTracker, extract_json
-from llm247_v2.models import Directive, TaskStatus
-from llm247_v2.observer import NullObserver, Observer
-from llm247_v2.planner import plan_task_with_constitution, serialize_plan
-from llm247_v2.safety import SafetyPolicy
-from llm247_v2.store import TaskStore
-from llm247_v2.verifier import format_verification, verify_task
+from llm247_v2.llm.client import BudgetExhaustedError, LLMClient, TokenTracker, extract_json
+from llm247_v2.core.models import Directive, TaskStatus
+from llm247_v2.observability.observer import NullObserver, Observer
+from llm247_v2.execution.planner import plan_task_with_constitution, serialize_plan
+from llm247_v2.execution.safety import SafetyPolicy
+from llm247_v2.storage.store import TaskStore
+from llm247_v2.execution.verifier import format_verification, verify_task
 
 logger = logging.getLogger("llm247_v2.agent")
 
@@ -406,7 +406,7 @@ class AutonomousAgentV2:
             profile = load_interest_profile(self.interest_profile_path)
             for area in directive.focus_areas:
                 if area not in profile.interests:
-                    from llm247_v2.interest import Interest
+                    from llm247_v2.discovery.interest import Interest
                     profile.interests[area] = Interest(topic=area, strength=1.0, source="directive")
             return profile
         return build_interest_profile(directive, self.exp_store, emap)

@@ -6,10 +6,10 @@ import unittest
 import urllib.request
 from pathlib import Path
 
-from llm247_v2.dashboard import serve_dashboard, _api_tasks, _api_stats, _api_inject_task, _api_task_detail, _api_set_paused, _task_row, _task_full
-from llm247_v2.directive import load_directive, save_directive
-from llm247_v2.models import Directive, Task
-from llm247_v2.store import TaskStore
+from llm247_v2.dashboard.server import serve_dashboard, _api_tasks, _api_stats, _api_inject_task, _api_task_detail, _api_set_paused, _task_row, _task_full
+from llm247_v2.core.directive import load_directive, save_directive
+from llm247_v2.core.models import Directive, Task
+from llm247_v2.storage.store import TaskStore
 
 
 class TestDashboardAPI(unittest.TestCase):

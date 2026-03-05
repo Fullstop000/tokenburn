@@ -1,4 +1,4 @@
-"""Tests for llm247_v2.interest — Interest profile + Issue discovery."""
+"""Tests for llm247_v2.discovery.interest — Interest profile + Issue discovery."""
 
 import json
 import tempfile
@@ -6,7 +6,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from llm247_v2.interest import (
+from llm247_v2.discovery.interest import (
     Interest,
     InterestProfile,
     build_interest_profile,
@@ -17,7 +17,7 @@ from llm247_v2.interest import (
     load_interest_profile,
     save_interest_profile,
 )
-from llm247_v2.models import Directive, TaskSource
+from llm247_v2.core.models import Directive, TaskSource
 
 
 class TestInterest(unittest.TestCase):
@@ -124,7 +124,7 @@ class TestBuildInterestProfile(unittest.TestCase):
 
 
 class TestDiscoverGitHubIssues(unittest.TestCase):
-    @patch("llm247_v2.interest.subprocess.run")
+    @patch("llm247_v2.discovery.interest.subprocess.run")
     def test_parses_issues(self, mock_run):
         mock_run.return_value = type("R", (), {
             "returncode": 0,
@@ -141,7 +141,7 @@ class TestDiscoverGitHubIssues(unittest.TestCase):
         self.assertEqual(tasks[0].priority, 1)
         self.assertEqual(tasks[1].priority, 3)
 
-    @patch("llm247_v2.interest.subprocess.run")
+    @patch("llm247_v2.discovery.interest.subprocess.run")
     def test_skips_existing(self, mock_run):
         mock_run.return_value = type("R", (), {
             "returncode": 0,
@@ -153,7 +153,7 @@ class TestDiscoverGitHubIssues(unittest.TestCase):
         tasks = discover_github_issues(Path("/tmp"), {"GitHub #42: Fix login bug"})
         self.assertEqual(len(tasks), 0)
 
-    @patch("llm247_v2.interest.subprocess.run")
+    @patch("llm247_v2.discovery.interest.subprocess.run")
     def test_handles_failure(self, mock_run):
         mock_run.return_value = type("R", (), {
             "returncode": 1, "stdout": "", "stderr": "not a repo",
@@ -163,7 +163,7 @@ class TestDiscoverGitHubIssues(unittest.TestCase):
 
 
 class TestDiscoverDepVulnerabilities(unittest.TestCase):
-    @patch("llm247_v2.interest.subprocess.run")
+    @patch("llm247_v2.discovery.interest.subprocess.run")
     def test_parses_vulnerabilities(self, mock_run):
         mock_run.return_value = type("R", (), {
             "returncode": 1,
@@ -181,7 +181,7 @@ class TestDiscoverDepVulnerabilities(unittest.TestCase):
         self.assertEqual(tasks[0].source, TaskSource.DEP_AUDIT.value)
         self.assertEqual(tasks[0].priority, 1)
 
-    @patch("llm247_v2.interest.subprocess.run")
+    @patch("llm247_v2.discovery.interest.subprocess.run")
     def test_handles_no_pip_audit(self, mock_run):
         mock_run.side_effect = FileNotFoundError
         tasks = discover_dep_vulnerabilities(Path("/tmp"), set())

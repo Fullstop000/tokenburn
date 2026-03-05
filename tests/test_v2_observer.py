@@ -4,7 +4,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import MagicMock
 
-from llm247_v2.observer import (
+from llm247_v2.observability.observer import (
     AgentEvent,
     ConsoleHandler,
     HumanLogHandler,

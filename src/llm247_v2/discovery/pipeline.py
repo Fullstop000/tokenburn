@@ -7,9 +7,9 @@ import subprocess
 from pathlib import Path
 from typing import TYPE_CHECKING, List, Optional
 
-from llm247_v2.constitution import Constitution
-from llm247_v2.prompts import render as render_prompt
-from llm247_v2.exploration import (
+from llm247_v2.core.constitution import Constitution
+from llm247_v2.llm.prompts import render as render_prompt
+from llm247_v2.discovery.exploration import (
     ExplorationMap,
     Strategy,
     build_deep_review_context,
@@ -19,7 +19,7 @@ from llm247_v2.exploration import (
     scan_stale_areas,
     select_strategy,
 )
-from llm247_v2.interest import (
+from llm247_v2.discovery.interest import (
     InterestProfile,
     build_interest_profile,
     discover_dep_vulnerabilities,
@@ -27,9 +27,9 @@ from llm247_v2.interest import (
     discover_interest_driven,
     discover_web_search,
 )
-from llm247_v2.llm_client import LLMClient, extract_json
-from llm247_v2.models import Directive, Task, TaskSource, TaskStatus
-from llm247_v2.value import (
+from llm247_v2.llm.client import LLMClient, extract_json
+from llm247_v2.core.models import Directive, Task, TaskSource, TaskStatus
+from llm247_v2.discovery.value import (
     TaskValue,
     assess_task_value_heuristic,
     assess_tasks_with_llm,
@@ -39,9 +39,9 @@ from llm247_v2.value import (
 )
 
 if TYPE_CHECKING:
-    from llm247_v2.observer import Observer
+    from llm247_v2.observability.observer import Observer
 
-logger = logging.getLogger("llm247_v2.discovery")
+logger = logging.getLogger("llm247_v2.discovery.pipeline")
 
 
 def discover_and_evaluate(

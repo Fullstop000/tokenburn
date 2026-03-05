@@ -6,13 +6,13 @@ from pathlib import Path
 import re
 from typing import List
 
-from llm247_v2.constitution import Constitution
-from llm247_v2.directive import directive_to_prompt_section
-from llm247_v2.llm_client import LLMClient, extract_json
-from llm247_v2.models import Directive, PlanStep, Task, TaskPlan
-from llm247_v2.prompts import render as render_prompt
+from llm247_v2.core.constitution import Constitution
+from llm247_v2.core.directive import directive_to_prompt_section
+from llm247_v2.llm.client import LLMClient, extract_json
+from llm247_v2.core.models import Directive, PlanStep, Task, TaskPlan
+from llm247_v2.llm.prompts import render as render_prompt
 
-logger = logging.getLogger("llm247_v2.planner")
+logger = logging.getLogger("llm247_v2.execution.planner")
 
 
 def plan_task_with_constitution(
@@ -41,7 +41,7 @@ def plan_task_with_constitution(
 
 def plan_task(task: Task, workspace: Path, directive: Directive, llm: LLMClient) -> TaskPlan:
     """Legacy entry point without constitution — for backward compatibility."""
-    from llm247_v2.constitution import _default_constitution
+    from llm247_v2.core.constitution import _default_constitution
     return plan_task_with_constitution(task, workspace, directive, _default_constitution(), llm)
 
 

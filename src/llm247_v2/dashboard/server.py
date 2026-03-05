@@ -10,11 +10,11 @@ from pathlib import Path
 from typing import Any, Dict, Optional
 from urllib.parse import parse_qs, urlparse
 
-from llm247_v2.directive import load_directive, save_directive
-from llm247_v2.models import Directive, TaskSourceConfig, TaskStatus
-from llm247_v2.store import TaskStore
+from llm247_v2.core.directive import load_directive, save_directive
+from llm247_v2.core.models import Directive, TaskSourceConfig, TaskStatus
+from llm247_v2.storage.store import TaskStore
 
-logger = logging.getLogger("llm247_v2.dashboard")
+logger = logging.getLogger("llm247_v2.dashboard.server")
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _FRONTEND_DIST_DIR = _REPO_ROOT / "frontend" / "dist"
 
@@ -244,7 +244,7 @@ def _api_inject_task(store: TaskStore, body: dict) -> dict:
     if not title:
         return {"error": "title required"}
     task_id = hashlib.sha256(f"manual:{title}".encode()).hexdigest()[:12]
-    from llm247_v2.models import Task, TaskSource
+    from llm247_v2.core.models import Task, TaskSource
     task = Task(
         id=task_id,
         title=title,

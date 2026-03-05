@@ -6,10 +6,10 @@ import threading
 from pathlib import Path
 from typing import List, Optional, Tuple
 
-from llm247_v2.models import Directive, PlanStep, TaskPlan
-from llm247_v2.safety import SafetyPolicy
+from llm247_v2.core.models import Directive, PlanStep, TaskPlan
+from llm247_v2.execution.safety import SafetyPolicy
 
-logger = logging.getLogger("llm247_v2.executor")
+logger = logging.getLogger("llm247_v2.execution.executor")
 
 
 class ExecutionResult:

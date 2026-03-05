@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, List, Optional
 
-from llm247_v2.models import CycleReport, Task
+from llm247_v2.core.models import CycleReport, Task
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS tasks (

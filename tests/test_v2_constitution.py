@@ -2,7 +2,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from llm247_v2.constitution import (
+from llm247_v2.core.constitution import (
     Constitution,
     _default_constitution,
     _parse_constitution,

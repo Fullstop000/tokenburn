@@ -3,7 +3,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from llm247_v2.llm_client import LLMAuditLogger, TokenTracker, UsageInfo, extract_json
+from llm247_v2.llm.client import LLMAuditLogger, TokenTracker, UsageInfo, extract_json
 
 
 class TestUsageInfo(unittest.TestCase):

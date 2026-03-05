@@ -1,4 +1,4 @@
-"""Tests for llm247_v2.discovery — Task discovery pipeline."""
+"""Tests for llm247_v2.discovery.pipeline — Task discovery pipeline."""
 
 import json
 import tempfile
@@ -6,8 +6,8 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from llm247_v2.constitution import _default_constitution
-from llm247_v2.discovery import (
+from llm247_v2.core.constitution import _default_constitution
+from llm247_v2.discovery.pipeline import (
     _build_rich_context,
     _extract_tag,
     _make_id,
@@ -18,8 +18,8 @@ from llm247_v2.discovery import (
     _scan_todos,
     discover_and_evaluate,
 )
-from llm247_v2.exploration import ExplorationMap
-from llm247_v2.models import Directive
+from llm247_v2.discovery.exploration import ExplorationMap
+from llm247_v2.core.models import Directive
 
 
 class FakeLLM:

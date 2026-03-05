@@ -30,7 +30,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-logger = logging.getLogger("llm247_v2.observer")
+logger = logging.getLogger("llm247_v2.observability.observer")
 
 # ──────────────────────────────────────────────
 # Event model

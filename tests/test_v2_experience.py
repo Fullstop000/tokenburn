@@ -3,14 +3,14 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from llm247_v2.experience import (
+from llm247_v2.storage.experience import (
     Experience,
     ExperienceStore,
     extract_learnings,
     format_experiences_for_prompt,
     format_whats_learned,
 )
-from llm247_v2.llm_client import extract_json
+from llm247_v2.llm.client import extract_json
 
 
 class TestExperienceStore(unittest.TestCase):

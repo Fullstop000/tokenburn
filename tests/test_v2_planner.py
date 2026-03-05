@@ -1,8 +1,8 @@
 import unittest
 
-from llm247_v2.models import Directive, Task
-from llm247_v2.planner import deserialize_plan, serialize_plan
-from llm247_v2.models import PlanStep, TaskPlan
+from llm247_v2.core.models import Directive, Task
+from llm247_v2.execution.planner import deserialize_plan, serialize_plan
+from llm247_v2.core.models import PlanStep, TaskPlan
 
 
 class FakeLLM:
@@ -42,7 +42,7 @@ class TestPlanSerialization(unittest.TestCase):
 
 class TestPlanTask(unittest.TestCase):
     def test_valid_llm_response(self):
-        from llm247_v2.planner import plan_task
+        from llm247_v2.execution.planner import plan_task
         from pathlib import Path
         import tempfile
 
@@ -57,7 +57,7 @@ class TestPlanTask(unittest.TestCase):
             self.assertEqual(plan.commit_message, "fix: x")
 
     def test_fallback_on_bad_response(self):
-        from llm247_v2.planner import plan_task
+        from llm247_v2.execution.planner import plan_task
         from pathlib import Path
         import tempfile
 

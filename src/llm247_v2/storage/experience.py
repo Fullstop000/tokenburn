@@ -23,9 +23,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, List, Optional
 
-from llm247_v2.prompts import render as render_prompt
+from llm247_v2.llm.prompts import render as render_prompt
 
-logger = logging.getLogger("llm247_v2.experience")
+logger = logging.getLogger("llm247_v2.storage.experience")
 
 _EXP_SCHEMA = """
 CREATE TABLE IF NOT EXISTS experiences (

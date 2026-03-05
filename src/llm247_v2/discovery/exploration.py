@@ -9,11 +9,11 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Dict, List, Optional
 
-from llm247_v2.constitution import Constitution
-from llm247_v2.llm_client import LLMClient, extract_json
-from llm247_v2.models import Directive
+from llm247_v2.core.constitution import Constitution
+from llm247_v2.llm.client import LLMClient, extract_json
+from llm247_v2.core.models import Directive
 
-logger = logging.getLogger("llm247_v2.exploration")
+logger = logging.getLogger("llm247_v2.discovery.exploration")
 
 
 @dataclass

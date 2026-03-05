@@ -3,8 +3,8 @@ import time
 import unittest
 from pathlib import Path
 
-from llm247_v2.constitution import _default_constitution
-from llm247_v2.exploration import (
+from llm247_v2.core.constitution import _default_constitution
+from llm247_v2.discovery.exploration import (
     BUILTIN_STRATEGIES,
     ExplorationMap,
     AreaStatus,
@@ -14,7 +14,7 @@ from llm247_v2.exploration import (
     scan_complexity,
     select_strategy,
 )
-from llm247_v2.models import Directive, TaskSourceConfig
+from llm247_v2.core.models import Directive, TaskSourceConfig
 
 
 class TestExplorationMap(unittest.TestCase):

@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import List
 
-logger = logging.getLogger("llm247_v2.verifier")
+logger = logging.getLogger("llm247_v2.execution.verifier")
 
 
 @dataclass

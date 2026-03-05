@@ -90,18 +90,18 @@ def main() -> int:
     logger = logging.getLogger("llm247_v2")
     logger.info("TokenBurn Agent V2 starting workspace=%s", workspace)
 
-    from llm247_v2.store import TaskStore
+    from llm247_v2.storage.store import TaskStore
     store = TaskStore(db_path)
 
     if args.ui:
-        from llm247_v2.dashboard import serve_dashboard
+        from llm247_v2.dashboard.server import serve_dashboard
         serve_dashboard(store, directive_path, host=args.ui_host, port=args.ui_port, state_dir=state_dir)
         return 0
 
-    from llm247_v2.llm_client import ArkLLMClient, BudgetExhaustedError, LLMAuditLogger
+    from llm247_v2.llm.client import ArkLLMClient, BudgetExhaustedError, LLMAuditLogger
     from llm247_v2.agent import AutonomousAgentV2, GracefulShutdown, run_agent_loop
-    from llm247_v2.experience import ExperienceStore
-    from llm247_v2.observer import create_default_observer
+    from llm247_v2.storage.experience import ExperienceStore
+    from llm247_v2.observability.observer import create_default_observer
 
     audit_logger = LLMAuditLogger(state_dir / "llm_audit.jsonl")
     llm = ArkLLMClient(api_key=api_key, base_url=base_url, model=model, audit_logger=audit_logger)
@@ -139,7 +139,7 @@ def main() -> int:
     signal.signal(signal.SIGINT, _handle_signal)
 
     if args.with_ui:
-        from llm247_v2.dashboard import serve_dashboard
+        from llm247_v2.dashboard.server import serve_dashboard
         ui_thread = threading.Thread(
             target=serve_dashboard,
             args=(store, directive_path, args.ui_host, args.ui_port),

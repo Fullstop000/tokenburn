@@ -1,6 +1,6 @@
 import unittest
 
-from llm247_v2.models import (
+from llm247_v2.core.models import (
     CycleReport,
     Directive,
     PlanStep,

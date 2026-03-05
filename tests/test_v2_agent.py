@@ -4,11 +4,11 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 from llm247_v2.agent import AutonomousAgentV2, run_agent_loop
-from llm247_v2.directive import save_directive
-from llm247_v2.llm_client import BudgetExhaustedError
-from llm247_v2.models import Directive, TaskSourceConfig
-from llm247_v2.observer import MemoryHandler, Observer
-from llm247_v2.store import TaskStore
+from llm247_v2.core.directive import save_directive
+from llm247_v2.llm.client import BudgetExhaustedError
+from llm247_v2.core.models import Directive, TaskSourceConfig
+from llm247_v2.observability.observer import MemoryHandler, Observer
+from llm247_v2.storage.store import TaskStore
 
 
 class FakeLLM:

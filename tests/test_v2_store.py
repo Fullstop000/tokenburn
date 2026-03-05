@@ -2,8 +2,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from llm247_v2.models import Task, TaskStatus
-from llm247_v2.store import TaskStore
+from llm247_v2.core.models import Task, TaskStatus
+from llm247_v2.storage.store import TaskStore
 
 
 class TestTaskStore(unittest.TestCase):

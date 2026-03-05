@@ -4,12 +4,12 @@ import logging
 from dataclasses import dataclass
 from typing import List, Optional
 
-from llm247_v2.constitution import Constitution
-from llm247_v2.llm_client import LLMClient, extract_json
-from llm247_v2.models import Directive, Task
-from llm247_v2.prompts import render as render_prompt
+from llm247_v2.core.constitution import Constitution
+from llm247_v2.llm.client import LLMClient, extract_json
+from llm247_v2.core.models import Directive, Task
+from llm247_v2.llm.prompts import render as render_prompt
 
-logger = logging.getLogger("llm247_v2.value")
+logger = logging.getLogger("llm247_v2.discovery.value")
 
 
 @dataclass(frozen=True)

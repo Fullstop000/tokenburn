@@ -25,15 +25,15 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Dict, List, Optional
 
-from llm247_v2.models import Directive, Task, TaskSource, TaskStatus
-from llm247_v2.prompts import render as render_prompt
+from llm247_v2.core.models import Directive, Task, TaskSource, TaskStatus
+from llm247_v2.llm.prompts import render as render_prompt
 
 if TYPE_CHECKING:
-    from llm247_v2.experience import ExperienceStore
-    from llm247_v2.exploration import ExplorationMap
-    from llm247_v2.llm_client import LLMClient
+    from llm247_v2.storage.experience import ExperienceStore
+    from llm247_v2.discovery.exploration import ExplorationMap
+    from llm247_v2.llm.client import LLMClient
 
-logger = logging.getLogger("llm247_v2.interest")
+logger = logging.getLogger("llm247_v2.discovery.interest")
 
 
 # ─── Interest Profile ──────────────────────────────
@@ -310,7 +310,7 @@ def discover_web_search(
     The LLM acts as a knowledgeable engineer who has read recent security
     advisories, deprecation notices, and best practices for the project's stack.
     """
-    from llm247_v2.llm_client import extract_json
+    from llm247_v2.llm.client import extract_json
 
     deps_context = _read_dependency_context(workspace)
     stack_context = _detect_tech_stack(workspace)
@@ -368,7 +368,7 @@ def discover_interest_driven(
     existing_titles: set[str],
 ) -> List[Task]:
     """Generate tasks driven by the agent's evolved interests."""
-    from llm247_v2.llm_client import extract_json
+    from llm247_v2.llm.client import extract_json
 
     if not interest_profile.interests:
         return []

@@ -3,13 +3,13 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from llm247_v2.directive import (
+from llm247_v2.core.directive import (
     default_directive,
     directive_to_prompt_section,
     load_directive,
     save_directive,
 )
-from llm247_v2.models import Directive, TaskSourceConfig
+from llm247_v2.core.models import Directive, TaskSourceConfig
 
 
 class TestDirective(unittest.TestCase):

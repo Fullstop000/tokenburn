@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from llm247_v2.models import Directive, TaskSourceConfig
+from llm247_v2.core.models import Directive, TaskSourceConfig
 
 
 def default_directive() -> Directive:
