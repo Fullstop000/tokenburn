@@ -157,7 +157,8 @@ class TaskStore:
             self._conn.commit()
 
     def get_task(self, task_id: str) -> Optional[Task]:
-        row = self._conn.execute("SELECT * FROM tasks WHERE id=?", (task_id,)).fetchone()
+        with self._lock:
+            row = self._conn.execute("SELECT * FROM tasks WHERE id=?", (task_id,)).fetchone()
         return _row_to_task(row) if row else None
 
     def list_tasks(
@@ -166,32 +167,35 @@ class TaskStore:
         limit: int = 100,
         offset: int = 0,
     ) -> List[Task]:
-        if status:
-            rows = self._conn.execute(
-                "SELECT * FROM tasks WHERE status=? ORDER BY priority, updated_at DESC LIMIT ? OFFSET ?",
-                (status, limit, offset),
-            ).fetchall()
-        else:
-            rows = self._conn.execute(
-                "SELECT * FROM tasks ORDER BY updated_at DESC LIMIT ? OFFSET ?",
-                (limit, offset),
-            ).fetchall()
+        with self._lock:
+            if status:
+                rows = self._conn.execute(
+                    "SELECT * FROM tasks WHERE status=? ORDER BY priority, updated_at DESC LIMIT ? OFFSET ?",
+                    (status, limit, offset),
+                ).fetchall()
+            else:
+                rows = self._conn.execute(
+                    "SELECT * FROM tasks ORDER BY updated_at DESC LIMIT ? OFFSET ?",
+                    (limit, offset),
+                ).fetchall()
         return [_row_to_task(r) for r in rows]
 
     def get_next_queued_task(self) -> Optional[Task]:
         """Pick the highest-priority queued task."""
-        row = self._conn.execute(
-            "SELECT * FROM tasks WHERE status='queued' ORDER BY priority ASC, created_at ASC LIMIT 1"
-        ).fetchone()
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT * FROM tasks WHERE status='queued' ORDER BY priority ASC, created_at ASC LIMIT 1"
+            ).fetchone()
         return _row_to_task(row) if row else None
 
     def has_duplicate(self, title: str, source: str) -> bool:
-        row = self._conn.execute(
-            """SELECT 1 FROM tasks
-               WHERE title=? AND source=? AND status NOT IN ('completed', 'failed', 'cancelled')
-               LIMIT 1""",
-            (title, source),
-        ).fetchone()
+        with self._lock:
+            row = self._conn.execute(
+                """SELECT 1 FROM tasks
+                   WHERE title=? AND source=? AND status NOT IN ('completed', 'failed', 'cancelled')
+                   LIMIT 1""",
+                (title, source),
+            ).fetchone()
         return row is not None
 
     def add_event(self, task_id: str, event_type: str, detail: str = "") -> None:
@@ -203,10 +207,11 @@ class TaskStore:
             self._conn.commit()
 
     def get_events(self, task_id: str, limit: int = 50) -> List[Dict]:
-        rows = self._conn.execute(
-            "SELECT * FROM task_events WHERE task_id=? ORDER BY created_at DESC LIMIT ?",
-            (task_id, limit),
-        ).fetchall()
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT * FROM task_events WHERE task_id=? ORDER BY created_at DESC LIMIT ?",
+                (task_id, limit),
+            ).fetchall()
         return [dict(r) for r in rows]
 
     def start_cycle(self) -> int:
@@ -237,9 +242,10 @@ class TaskStore:
             self._conn.commit()
 
     def get_recent_cycles(self, limit: int = 20) -> List[CycleReport]:
-        rows = self._conn.execute(
-            "SELECT * FROM cycles ORDER BY id DESC LIMIT ?", (limit,)
-        ).fetchall()
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT * FROM cycles ORDER BY id DESC LIMIT ?", (limit,)
+            ).fetchall()
         return [
             CycleReport(
                 cycle_id=r["id"],
@@ -256,12 +262,14 @@ class TaskStore:
         ]
 
     def get_stats(self) -> Dict:
+        with self._lock:
+            status_rows = self._conn.execute("SELECT status, COUNT(*) as cnt FROM tasks GROUP BY status").fetchall()
+            cycle_row = self._conn.execute("SELECT COUNT(*) as cnt FROM cycles").fetchone()
+            token_row = self._conn.execute("SELECT COALESCE(SUM(token_cost), 0) as total FROM tasks").fetchone()
         counts: Dict[str, int] = {}
-        for row in self._conn.execute("SELECT status, COUNT(*) as cnt FROM tasks GROUP BY status").fetchall():
+        for row in status_rows:
             counts[row["status"]] = row["cnt"]
         total = sum(counts.values())
-        cycle_row = self._conn.execute("SELECT COUNT(*) as cnt FROM cycles").fetchone()
-        token_row = self._conn.execute("SELECT COALESCE(SUM(token_cost), 0) as total FROM tasks").fetchone()
         return {
             "total_tasks": total,
             "status_counts": counts,

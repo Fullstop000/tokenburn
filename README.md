@@ -40,6 +40,7 @@ src/llm247_v2/
 
 ### 环境要求
 - Python 3.10+
+- Node.js 18+（Dashboard UI 构建）
 - `openai` SDK (`pip install -r requirements.txt`)
 - `gh` CLI (可选，用于创建 PR)
 
@@ -68,6 +69,12 @@ cp .env.example .env
 # 运行测试
 ./scripts/start_v2.sh test
 ```
+
+说明：
+- `ui` / `both` 启动前会自动检查并构建 `frontend/dist`（缺失时自动 `npm install && npm run build`）。
+- 可通过环境变量控制：
+  - `FORCE_FRONTEND_BUILD=1`：每次 `ui` / `both` 都强制重建前端
+  - `SKIP_FRONTEND_BUILD=1`：跳过前端自动构建检查
 
 或直接使用 Python：
 

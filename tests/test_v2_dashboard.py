@@ -6,8 +6,8 @@ import unittest
 import urllib.request
 from pathlib import Path
 
-from llm247_v2.dashboard import serve_dashboard, _api_tasks, _api_stats, _api_inject_task, _api_task_detail, _task_row, _task_full
-from llm247_v2.directive import save_directive
+from llm247_v2.dashboard import serve_dashboard, _api_tasks, _api_stats, _api_inject_task, _api_task_detail, _api_set_paused, _task_row, _task_full
+from llm247_v2.directive import load_directive, save_directive
 from llm247_v2.models import Directive, Task
 from llm247_v2.store import TaskStore
 
@@ -57,6 +57,41 @@ class TestDashboardAPI(unittest.TestCase):
     def test_inject_no_title(self):
         result = _api_inject_task(self.store, {})
         self.assertIn("error", result)
+
+
+class TestPauseResumeAPI(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.directive_path = Path(self.tmp.name) / "directive.json"
+        save_directive(self.directive_path, Directive())
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def test_pause_sets_paused_true(self):
+        result = _api_set_paused(self.directive_path, paused=True)
+        self.assertEqual(result["status"], "ok")
+        self.assertTrue(result["paused"])
+        self.assertTrue(load_directive(self.directive_path).paused)
+
+    def test_resume_sets_paused_false(self):
+        save_directive(self.directive_path, Directive(paused=True))
+        result = _api_set_paused(self.directive_path, paused=False)
+        self.assertEqual(result["status"], "ok")
+        self.assertFalse(result["paused"])
+        self.assertFalse(load_directive(self.directive_path).paused)
+
+    def test_pause_preserves_other_fields(self):
+        directive = load_directive(self.directive_path)
+        directive.focus_areas = ["security", "testing"]
+        directive.poll_interval_seconds = 60
+        save_directive(self.directive_path, directive)
+
+        _api_set_paused(self.directive_path, paused=True)
+        reloaded = load_directive(self.directive_path)
+        self.assertTrue(reloaded.paused)
+        self.assertEqual(reloaded.focus_areas, ["security", "testing"])
+        self.assertEqual(reloaded.poll_interval_seconds, 60)
 
 
 class TestTaskDetailAPI(unittest.TestCase):
@@ -154,6 +189,13 @@ class TestDashboardServer(unittest.TestCase):
             resp = urllib.request.urlopen(f"http://127.0.0.1:{port}/")
             html = resp.read().decode()
             self.assertIn("TokenBurn Agent V2", html)
+            if "/assets/dashboard.js" in html:
+                self.assertIn("id=\"root\"", html)
+                js_resp = urllib.request.urlopen(f"http://127.0.0.1:{port}/assets/dashboard.js")
+                js_body = js_resp.read().decode()
+                self.assertGreater(len(js_body), 100)
+            else:
+                self.assertIn("Dashboard frontend build not found.", html)
 
             resp = urllib.request.urlopen(f"http://127.0.0.1:{port}/api/tasks")
             data = json.loads(resp.read().decode())
