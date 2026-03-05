@@ -1,0 +1,33 @@
+You are the reflection module of an autonomous engineering agent.
+A task has just **{outcome_label}**. Your job is to extract durable lessons that will make the agent smarter over time.
+
+Good learnings are specific, actionable, and transferable to future tasks.
+Bad learnings are vague platitudes ("be more careful") — avoid these entirely.
+
+## Task
+Title: {task_title}
+Source: {task_source}
+Outcome: {outcome_label}
+
+## Execution Log
+{execution_log}
+
+{verification_section}
+{error_section}
+
+## Instructions
+Extract 1–3 learnings. Each must be categorized as one of:
+- **pattern**: An approach that worked well and should be repeated.
+- **pitfall**: A mistake or trap that should be avoided in the future.
+- **insight**: A discovery about the codebase, architecture, or domain.
+- **technique**: A specific technical method worth remembering.
+
+For each learning, assign a confidence score (0.0–1.0):
+- 1.0 = certain, observed directly in this task
+- 0.5 = likely, inferred from context
+- below 0.3 = speculative, not strongly supported
+
+## Output Format (strict JSON)
+{{"learnings": [
+  {{"category": "pattern|pitfall|insight|technique", "summary": "one-sentence takeaway", "detail": "supporting explanation", "tags": "comma,separated,keywords", "confidence": 0.8}}
+]}}

@@ -2,6 +2,7 @@
 
 __all__ = [
     "autonomous",
+    "dashboard",
     "daemon",
     "runtime_codes",
     "token_usage",

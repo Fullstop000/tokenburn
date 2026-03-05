@@ -68,6 +68,8 @@ class AutonomousState:
     cycle_count: int = 0
     last_cycle_observations: str = ""
     current_task: str = ""
+    current_task_iteration: int = 0
+    current_task_elapsed_seconds: float = 0.0
     progress_completed_actions: int = 0
     progress_total_actions: int = 0
     status: str = "idle"
@@ -107,6 +109,8 @@ class AutonomousStateStore:
                 cycle_count=int(raw_data.get("cycle_count", 0)),
                 last_cycle_observations=str(raw_data.get("last_cycle_observations", "")),
                 current_task=str(raw_data.get("current_task", "")),
+                current_task_iteration=int(raw_data.get("current_task_iteration", 0)),
+                current_task_elapsed_seconds=float(raw_data.get("current_task_elapsed_seconds", 0.0)),
                 progress_completed_actions=int(raw_data.get("progress_completed_actions", 0)),
                 progress_total_actions=int(raw_data.get("progress_total_actions", 0)),
                 status=str(raw_data.get("status", "idle")),
@@ -128,6 +132,8 @@ class AutonomousStateStore:
             "cycle_count": state.cycle_count,
             "last_cycle_observations": state.last_cycle_observations,
             "current_task": state.current_task,
+            "current_task_iteration": state.current_task_iteration,
+            "current_task_elapsed_seconds": state.current_task_elapsed_seconds,
             "progress_completed_actions": state.progress_completed_actions,
             "progress_total_actions": state.progress_total_actions,
             "status": state.status,
@@ -452,6 +458,7 @@ class AutonomousAgent:
     def run_once(self, now: Optional[datetime] = None) -> Path:
         """Run one autonomous cycle and persist report/state."""
         run_at = now or datetime.now(timezone.utc)
+        cycle_started_at = time.monotonic()
         state = self.state_store.load()
         resumed_from_pending = bool(state.pending_actions)
         _log_lifecycle_event(
@@ -481,12 +488,20 @@ class AutonomousAgent:
             )
             plan = self.planner.build_plan(context)
 
+        task_iteration = _next_task_iteration(state=state, goal=plan.goal, resumed_from_pending=resumed_from_pending)
+        base_elapsed_seconds = _task_base_elapsed_seconds(
+            state=state,
+            goal=plan.goal,
+            resumed_from_pending=resumed_from_pending,
+        )
         action_results: List[ActionResult] = []
         observations = state.last_cycle_observations
         remaining_actions = list(plan.actions)
         self._save_pending_state(
             state=state,
             plan=plan,
+            task_iteration=task_iteration,
+            task_elapsed_seconds=base_elapsed_seconds,
             pending_actions=remaining_actions,
             run_at=run_at,
             last_cycle_observations=state.last_cycle_observations,
@@ -495,6 +510,7 @@ class AutonomousAgent:
         for action in plan.actions:
             action_results.append(self.executor.execute(action=action, workspace_path=self.workspace_path))
             remaining_actions = remaining_actions[1:]
+            elapsed_seconds = base_elapsed_seconds + max(0.0, time.monotonic() - cycle_started_at)
             observations = "\n".join(
                 f"[{result.action_type}] success={result.success} output={result.output[:280]}"
                 for result in action_results
@@ -502,6 +518,8 @@ class AutonomousAgent:
             self._save_pending_state(
                 state=state,
                 plan=plan,
+                task_iteration=task_iteration,
+                task_elapsed_seconds=elapsed_seconds,
                 pending_actions=remaining_actions,
                 run_at=run_at,
                 last_cycle_observations=observations,
@@ -518,6 +536,7 @@ class AutonomousAgent:
             f"[{result.action_type}] success={result.success} output={result.output[:280]}"
             for result in action_results
         )
+        total_elapsed_seconds = base_elapsed_seconds + max(0.0, time.monotonic() - cycle_started_at)
         self.state_store.save(
             AutonomousState(
                 active_goal=plan.goal,
@@ -525,6 +544,8 @@ class AutonomousAgent:
                 cycle_count=state.cycle_count + 1,
                 last_cycle_observations=observations,
                 current_task=plan.goal,
+                current_task_iteration=task_iteration,
+                current_task_elapsed_seconds=total_elapsed_seconds,
                 progress_completed_actions=len(plan.actions),
                 progress_total_actions=len(plan.actions),
                 status="completed",
@@ -558,6 +579,8 @@ class AutonomousAgent:
                 cycle_count=state.cycle_count,
                 last_cycle_observations=state.last_cycle_observations,
                 current_task=state.current_task,
+                current_task_iteration=state.current_task_iteration,
+                current_task_elapsed_seconds=state.current_task_elapsed_seconds,
                 progress_completed_actions=state.progress_completed_actions,
                 progress_total_actions=state.progress_total_actions,
                 status=reason,
@@ -575,6 +598,8 @@ class AutonomousAgent:
         self,
         state: AutonomousState,
         plan: AutonomousPlan,
+        task_iteration: int,
+        task_elapsed_seconds: float,
         pending_actions: List[AgentAction],
         run_at: datetime,
         last_cycle_observations: str,
@@ -589,6 +614,8 @@ class AutonomousAgent:
                 cycle_count=state.cycle_count,
                 last_cycle_observations=last_cycle_observations,
                 current_task=plan.goal,
+                current_task_iteration=task_iteration,
+                current_task_elapsed_seconds=max(0.0, task_elapsed_seconds),
                 progress_completed_actions=completed_actions,
                 progress_total_actions=total_actions,
                 status="running",
@@ -693,6 +720,24 @@ def run_autonomous_loop(
     agent.mark_stopped(reason="max_cycles_reached")
     _log_lifecycle_event(event="autonomous_loop_stopped", reason="max_cycles_reached")
     return "max_cycles_reached"
+
+
+def _next_task_iteration(state: AutonomousState, goal: str, resumed_from_pending: bool) -> int:
+    """Compute iteration index for the currently running goal."""
+    if resumed_from_pending and state.current_task == goal and state.current_task_iteration > 0:
+        return state.current_task_iteration
+    if state.current_task == goal:
+        return max(1, state.current_task_iteration + 1)
+    return 1
+
+
+def _task_base_elapsed_seconds(state: AutonomousState, goal: str, resumed_from_pending: bool) -> float:
+    """Return elapsed time baseline to keep resumed work cumulative."""
+    if resumed_from_pending and state.current_task == goal:
+        return max(0.0, state.current_task_elapsed_seconds)
+    if state.current_task == goal:
+        return max(0.0, state.current_task_elapsed_seconds)
+    return 0.0
 
 
 def _extract_first_json_object(text: str) -> str:

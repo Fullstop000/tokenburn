@@ -21,6 +21,7 @@ from llm247.autonomous import (
     run_autonomous_loop,
 )
 from llm247.config import WorkerConfig
+from llm247.dashboard import serve_control_plane
 from llm247.daemon import should_restart_child
 from llm247.reports import ReportWriter
 from llm247.runtime_codes import EXIT_BUDGET_EXHAUSTED, EXIT_INTERRUPTED, EXIT_RUNTIME_ERROR
@@ -285,6 +286,9 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="run a supervisor process that restarts child runtime on crash",
     )
+    parser.add_argument("--ui", action="store_true", help="run task control-plane web UI only")
+    parser.add_argument("--ui-host", default="127.0.0.1", help="control-plane listen host")
+    parser.add_argument("--ui-port", type=int, default=8787, help="control-plane listen port")
     parser.add_argument("--child-process", action="store_true", help=argparse.SUPPRESS)
     return parser.parse_args()
 
@@ -305,6 +309,23 @@ def main() -> int:
         daemon=args.daemon,
         once=args.once,
     )
+
+    if args.ui:
+        if args.daemon or args.once:
+            logging.getLogger("llm247.dashboard").warning("--ui ignores runtime flags --daemon/--once")
+        log_lifecycle_event(
+            "control_plane_started",
+            host=args.ui_host,
+            port=args.ui_port,
+        )
+        serve_control_plane(
+            workspace_path=config.workspace_path,
+            autonomous_state_path=config.autonomous_state_path,
+            legacy_state_path=config.state_path,
+            host=args.ui_host,
+            port=args.ui_port,
+        )
+        return 0
 
     if args.daemon and args.once:
         logging.getLogger("llm247.daemon").warning("--daemon with --once is ignored, running once directly")
