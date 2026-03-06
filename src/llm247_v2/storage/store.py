@@ -62,6 +62,7 @@ _MIGRATIONS = [
     "ALTER TABLE tasks ADD COLUMN time_cost_seconds REAL DEFAULT 0.0",
     "ALTER TABLE tasks ADD COLUMN whats_learned TEXT DEFAULT ''",
     "ALTER TABLE tasks ADD COLUMN human_help_request TEXT DEFAULT ''",
+    "ALTER TABLE tasks ADD COLUMN replan_history TEXT DEFAULT ''",
 ]
 
 
@@ -91,6 +92,7 @@ def _row_to_task(row: sqlite3.Row) -> Task:
         time_cost_seconds=d.get("time_cost_seconds", 0.0) or 0.0,
         whats_learned=d.get("whats_learned", "") or "",
         human_help_request=d.get("human_help_request", "") or "",
+        replan_history=d.get("replan_history", "") or "",
     )
 
 
@@ -124,8 +126,9 @@ class TaskStore:
                    (id, title, description, source, status, priority,
                     created_at, updated_at, branch_name, pr_url, plan,
                     execution_log, verification_result, error_message, cycle_id,
-                    token_cost, time_cost_seconds, whats_learned, human_help_request)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    token_cost, time_cost_seconds, whats_learned, human_help_request,
+                    replan_history)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (
                     task.id, task.title, task.description, task.source,
                     task.status, task.priority,
@@ -133,7 +136,8 @@ class TaskStore:
                     task.branch_name, task.pr_url, task.plan,
                     task.execution_log, task.verification_result,
                     task.error_message, task.cycle_id,
-                    task.token_cost, task.time_cost_seconds, task.whats_learned, task.human_help_request,
+                    task.token_cost, task.time_cost_seconds, task.whats_learned,
+                    task.human_help_request, task.replan_history,
                 ),
             )
             self._conn.commit()
@@ -146,7 +150,8 @@ class TaskStore:
                    title=?, description=?, source=?, status=?, priority=?,
                    updated_at=?, branch_name=?, pr_url=?, plan=?,
                    execution_log=?, verification_result=?, error_message=?, cycle_id=?,
-                   token_cost=?, time_cost_seconds=?, whats_learned=?, human_help_request=?
+                   token_cost=?, time_cost_seconds=?, whats_learned=?, human_help_request=?,
+                   replan_history=?
                    WHERE id=?""",
                 (
                     task.title, task.description, task.source, task.status,
@@ -154,7 +159,7 @@ class TaskStore:
                     task.plan, task.execution_log, task.verification_result,
                     task.error_message, task.cycle_id,
                     task.token_cost, task.time_cost_seconds, task.whats_learned,
-                    task.human_help_request,
+                    task.human_help_request, task.replan_history,
                     task.id,
                 ),
             )

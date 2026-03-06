@@ -29,7 +29,12 @@ from llm247_v2.discovery.interest import (
 from llm247_v2.llm.client import BudgetExhaustedError, LLMClient, TokenTracker, extract_json
 from llm247_v2.core.models import Directive, TaskStatus
 from llm247_v2.observability.observer import NullObserver, Observer
-from llm247_v2.execution.planner import plan_task_with_constitution, serialize_plan
+from llm247_v2.execution.planner import (
+    format_execution_history_for_replan,
+    plan_task_with_constitution,
+    replan_task_with_constitution,
+    serialize_plan,
+)
 from llm247_v2.execution.safety import SafetyPolicy
 from llm247_v2.storage.store import TaskStore
 from llm247_v2.execution.verifier import format_verification, verify_task
@@ -240,45 +245,6 @@ class AutonomousAgentV2:
                 summaries = "; ".join(e.summary[:60] for e in relevant)
                 self.obs.experience_injected(task.id, len(relevant), summaries)
 
-        # ── Planning ──
-        self._check_shutdown("task planning")
-        task.status = TaskStatus.PLANNING.value
-        self.store.update_task(task)
-        self.obs.plan_started(task.id, task.title)
-
-        plan = plan_task_with_constitution(
-            task, self.workspace, directive, constitution, self.llm,
-            experience_context=experience_context,
-        )
-        task.plan = serialize_plan(plan)
-        self.store.update_task(task)
-        self.obs.plan_created(task.id, len(plan.steps), plan.commit_message)
-
-        # ── Constitution check ──
-        for step in plan.steps:
-            allowed, reason = constitution.check_action_allowed(step.action, step.target)
-            if not allowed:
-                self.obs.plan_blocked(task.id, reason)
-                return self._mark_task_needs_human(
-                    task,
-                    failure_message=f"Constitution blocked: {reason}",
-                    human_request=self._build_help_request(
-                        phase="Constitution Check",
-                        task=task,
-                        what_happened=f"The planned step `{step.action} {step.target}` was blocked by constitution policy.",
-                        blocking_reason=reason,
-                        suggested_actions=[
-                            f"Edit constitution at {self.constitution_path} to allow `{step.action}` on `{step.target}`.",
-                            "Or modify the task scope/description so the agent avoids this action.",
-                            "Then click Resolve to let the agent re-plan this task.",
-                        ],
-                        plan_context=task.plan,
-                    ),
-                    task_start_time=task_start_time,
-                    token_tracker=token_tracker,
-                    token_before=token_before,
-                )
-
         # ── Worktree isolation ──
         branch_name = ""
         worktree_path: Path | None = None
@@ -296,83 +262,26 @@ class AutonomousAgentV2:
             self.store.update_task(task)
             self.obs.git_worktree(task.id, str(exc)[:60], success=False)
 
-        # ── Execution ──
-        self._check_shutdown("task execution")
-        executor = PlanExecutor(
-            workspace=execution_workspace,
-            safety=self.safety,
-            directive=directive,
-            command_timeout=self.command_timeout,
-            shutdown_event=self._shutdown,
+        # ── Plan-Execute-Verify loop ──
+        success, plan, results = self._plan_execute_verify_loop(
+            task, directive, constitution, execution_workspace,
+            experience_context, worktree_path, branch_name,
+            token_tracker, token_before,
         )
-        all_ok, results = executor.execute_plan(plan)
-        task.execution_log = format_execution_log(results)
-        self.store.update_task(task)
 
-        for i, r in enumerate(results):
-            self.obs.execute_step(
-                task.id, i, len(results), r.action, r.target,
-                r.success, output=r.output[:100] if not r.success else "",
-            )
-        self.obs.execute_finished(task.id, all_ok)
-
-        if not all_ok:
-            error = results[-1].output[:300] if results else "unknown"
-            failed_steps = [
-                f"  Step {r.step_index}: `{r.action} {r.target}` — {r.output[:150]}"
-                for r in results if not r.success
-            ]
+        if not success:
             self._mark_task_needs_human(
                 task,
-                failure_message=f"Execution failed: {error}",
-                human_request=self._build_help_request(
-                    phase="Execution",
+                failure_message=task.error_message or "Execution failed after all replan rounds",
+                human_request=task.human_help_request or self._build_help_request(
+                    phase="Plan-Execute-Verify",
                     task=task,
-                    what_happened="One or more plan steps failed during execution.",
-                    blocking_reason="\n".join(failed_steps) if failed_steps else error,
+                    what_happened="All replan rounds exhausted without success.",
+                    blocking_reason=task.error_message or "unknown",
                     suggested_actions=[
-                        "Check the failing step output above and fix the underlying issue in the workspace.",
-                        f"Branch: `{branch_name}`" if branch_name else "No worktree branch (executed in main workspace).",
-                        "Then click Resolve to let the agent re-verify.",
-                    ],
-                    plan_context=task.plan,
-                ),
-                task_start_time=task_start_time,
-                token_tracker=token_tracker,
-                token_before=token_before,
-            )
-            self._cleanup_worktree(branch_name, worktree_path)
-            return False
-
-        # ── Verification ──
-        self._check_shutdown("task verification")
-        task.status = TaskStatus.VERIFYING.value
-        self.store.update_task(task)
-
-        changed_files = [r.target for r in results if r.action in ("edit_file", "create_file") and r.success]
-        verification = verify_task(execution_workspace, changed_files)
-        task.verification_result = format_verification(verification)
-        self.store.update_task(task)
-        self.obs.verify_result(task.id, verification.passed, verification.summary)
-
-        if not verification.passed:
-            failed_checks = [
-                f"  [{c.name}] {c.output[:200]}"
-                for c in verification.checks if not c.passed
-            ]
-            self._mark_task_needs_human(
-                task,
-                failure_message=f"Verification failed: {verification.summary}",
-                human_request=self._build_help_request(
-                    phase="Verification",
-                    task=task,
-                    what_happened="Post-execution verification checks did not pass.",
-                    blocking_reason="\n".join(failed_checks) if failed_checks else verification.summary,
-                    suggested_actions=[
-                        "Review the failing checks above and fix the issues in the workspace.",
-                        f"Changed files: {', '.join(f'`{f}`' for f in changed_files)}" if changed_files else "No changed files recorded.",
+                        "Review the replan history in the task detail view.",
                         f"Branch: `{branch_name}`" if branch_name else "No worktree branch.",
-                        "Then click Resolve to let the agent re-run verification.",
+                        "Fix the issue and click Resolve.",
                     ],
                     plan_context=task.plan,
                 ),
@@ -417,6 +326,226 @@ class AutonomousAgentV2:
         self._extract_and_store_learnings(task, "completed")
         self._maybe_consolidate_experience()
         return True
+
+    def _plan_execute_verify_loop(
+        self,
+        task,
+        directive: Directive,
+        constitution: Constitution,
+        execution_workspace: Path,
+        experience_context: str,
+        worktree_path: Path | None,
+        branch_name: str,
+        token_tracker,
+        token_before,
+    ) -> tuple[bool, TaskPlan | None, list]:
+        """Run the plan-execute-verify loop with bounded re-planning.
+
+        Returns (success, final_plan, final_results).
+        """
+        import json as _json
+
+        max_rounds = directive.max_replan_rounds
+        plan = None
+        results = []
+        trigger = ""
+        verification_output = ""
+        replan_rounds = []
+
+        for round_num in range(max_rounds):
+            # ── Plan or replan ──
+            self._check_shutdown("task planning")
+
+            if round_num == 0:
+                task.status = TaskStatus.PLANNING.value
+                self.store.update_task(task)
+                self.obs.plan_started(task.id, task.title)
+
+                plan = plan_task_with_constitution(
+                    task, self.workspace, directive, constitution, self.llm,
+                    experience_context=experience_context,
+                )
+                task.plan = serialize_plan(plan)
+                self.store.update_task(task)
+                self.obs.plan_created(task.id, len(plan.steps), plan.commit_message)
+            else:
+                executed_steps_text = format_execution_history_for_replan(results)
+                remaining = max_rounds - round_num
+                plan = replan_task_with_constitution(
+                    task, self.workspace, directive, constitution, self.llm,
+                    executed_steps=executed_steps_text,
+                    verification_output=verification_output,
+                    trigger=trigger,
+                    round_number=round_num,
+                    remaining_rounds=remaining,
+                )
+                task.plan = serialize_plan(plan)
+                self.store.update_task(task)
+                self.obs.replan_created(task.id, round_num, len(plan.steps))
+
+            # ── Constitution check (every round) ──
+            for step in plan.steps:
+                allowed, reason = constitution.check_action_allowed(step.action, step.target)
+                if not allowed:
+                    self.obs.plan_blocked(task.id, reason)
+                    task.error_message = f"Constitution blocked: {reason}"
+                    task.human_help_request = self._build_help_request(
+                        phase="Constitution Check",
+                        task=task,
+                        what_happened=f"The planned step `{step.action} {step.target}` was blocked by constitution policy.",
+                        blocking_reason=reason,
+                        suggested_actions=[
+                            f"Edit constitution at {self.constitution_path} to allow `{step.action}` on `{step.target}`.",
+                            "Or modify the task scope/description so the agent avoids this action.",
+                            "Then click Resolve to let the agent re-plan this task.",
+                        ],
+                        plan_context=task.plan,
+                    )
+                    return (False, None, [])
+
+            # ── Execute ──
+            self._check_shutdown("task execution")
+            task.status = TaskStatus.EXECUTING.value
+            self.store.update_task(task)
+
+            executor = PlanExecutor(
+                workspace=execution_workspace,
+                safety=self.safety,
+                directive=directive,
+                command_timeout=self.command_timeout,
+                shutdown_event=self._shutdown,
+            )
+            all_ok, results = executor.execute_plan(plan)
+            task.execution_log = format_execution_log(results)
+            self.store.update_task(task)
+
+            for i, r in enumerate(results):
+                self.obs.execute_step(
+                    task.id, i, len(results), r.action, r.target,
+                    r.success, output=r.output[:100] if not r.success else "",
+                )
+            self.obs.execute_finished(task.id, all_ok)
+
+            if not all_ok:
+                # Record round
+                self._append_replan_round(
+                    task, replan_rounds, round_num, plan, results,
+                    verification="", trigger="step_failure",
+                )
+
+                if round_num + 1 < max_rounds and not self._is_task_token_budget_exceeded(
+                    directive, token_tracker, token_before
+                ):
+                    trigger = "step_failure"
+                    verification_output = ""
+                    self.obs.replan_triggered(task.id, round_num + 1, trigger)
+                    continue
+
+                # Exhausted
+                self.obs.replan_exhausted(task.id, round_num + 1)
+                error = results[-1].output[:300] if results else "unknown"
+                failed_steps = [
+                    f"  Step {r.step_index}: `{r.action} {r.target}` — {r.output[:150]}"
+                    for r in results if not r.success
+                ]
+                task.error_message = f"Execution failed: {error}"
+                task.human_help_request = self._build_help_request(
+                    phase="Execution",
+                    task=task,
+                    what_happened=f"Execution failed after {round_num + 1} round(s).",
+                    blocking_reason="\n".join(failed_steps) if failed_steps else error,
+                    suggested_actions=[
+                        "Check the failing step output above and fix the underlying issue in the workspace.",
+                        f"Branch: `{branch_name}`" if branch_name else "No worktree branch (executed in main workspace).",
+                        "Then click Resolve to let the agent re-verify.",
+                    ],
+                    plan_context=task.plan,
+                )
+                return (False, plan, results)
+
+            # ── Verify ──
+            self._check_shutdown("task verification")
+            task.status = TaskStatus.VERIFYING.value
+            self.store.update_task(task)
+
+            changed_files = [r.target for r in results if r.action in ("edit_file", "create_file") and r.success]
+            verification = verify_task(execution_workspace, changed_files)
+            task.verification_result = format_verification(verification)
+            self.store.update_task(task)
+            self.obs.verify_result(task.id, verification.passed, verification.summary)
+            verification_output = format_verification(verification)
+
+            if not verification.passed:
+                # Record round
+                self._append_replan_round(
+                    task, replan_rounds, round_num, plan, results,
+                    verification=verification_output, trigger="verification_failure",
+                )
+
+                if round_num + 1 < max_rounds and not self._is_task_token_budget_exceeded(
+                    directive, token_tracker, token_before
+                ):
+                    trigger = "verification_failure"
+                    self.obs.replan_triggered(task.id, round_num + 1, trigger)
+                    continue
+
+                # Exhausted
+                self.obs.replan_exhausted(task.id, round_num + 1)
+                failed_checks = [
+                    f"  [{c.name}] {c.output[:200]}"
+                    for c in verification.checks if not c.passed
+                ]
+                task.error_message = f"Verification failed: {verification.summary}"
+                task.human_help_request = self._build_help_request(
+                    phase="Verification",
+                    task=task,
+                    what_happened=f"Verification failed after {round_num + 1} round(s).",
+                    blocking_reason="\n".join(failed_checks) if failed_checks else verification.summary,
+                    suggested_actions=[
+                        "Review the failing checks above and fix the issues in the workspace.",
+                        f"Changed files: {', '.join(f'`{f}`' for f in changed_files)}" if changed_files else "No changed files recorded.",
+                        f"Branch: `{branch_name}`" if branch_name else "No worktree branch.",
+                        "Then click Resolve to let the agent re-run verification.",
+                    ],
+                    plan_context=task.plan,
+                )
+                return (False, plan, results)
+
+            # Success!
+            return (True, plan, results)
+
+        # Should not reach here, but just in case
+        return (False, plan, results)
+
+    def _append_replan_round(self, task, rounds_list, round_num, plan, results, verification, trigger):
+        """Append a round summary to the replan history."""
+        import json as _json
+
+        round_data = {
+            "round_number": round_num,
+            "plan_steps": [
+                {"action": s.action, "target": s.target, "description": s.description}
+                for s in plan.steps
+            ],
+            "results": [
+                {"step_index": r.step_index, "action": r.action, "target": r.target,
+                 "success": r.success, "output": r.output[:300]}
+                for r in results
+            ],
+            "verification": verification,
+            "trigger": trigger,
+        }
+        rounds_list.append(round_data)
+        task.replan_history = _json.dumps(rounds_list, ensure_ascii=False)
+        self.store.update_task(task)
+
+    def _is_task_token_budget_exceeded(self, directive, token_tracker, token_before) -> bool:
+        if directive.max_tokens_per_task <= 0:
+            return False
+        if not token_tracker or not token_before:
+            return False
+        current = token_tracker.snapshot()["total_tokens"] - token_before["total_tokens"]
+        return current >= directive.max_tokens_per_task
 
     def _continue_verification_after_human_resolution(self, task, task_start_time: float, token_tracker, token_before) -> bool:
         """Resume verification for a task after human manually resolved blocking issues."""

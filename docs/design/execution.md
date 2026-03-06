@@ -1,7 +1,7 @@
 # Execution Module Design
 
 > Module: `src/llm247_v2/execution/`
-> Last updated: 2026-03-05
+> Last updated: 2026-03-06
 
 ## Purpose
 
@@ -13,20 +13,25 @@ The execution module takes a queued task and carries it through planning, safe e
 queued task
     │
     ▼
-planner.py          — LLM generates a structured execution plan
-    │
-    ▼
-constitution check  — every plan step checked against immutable safety rules
-    │ (blocked → NEEDS_HUMAN)
-    ▼
 git_ops.py          — create isolated git worktree on a fresh branch
     │
     ▼
-executor.py         — execute each plan step (edit_file, create_file, run_command, delete_lines)
-    │ (step fails → NEEDS_HUMAN)
-    ▼
-verifier.py         — post-execution checks (syntax, tests, secret scan)
-    │ (fails → NEEDS_HUMAN)
+┌───────────────────── Plan-Execute-Verify Loop (max N rounds) ──┐
+│                                                                 │
+│  planner.py          — LLM generates a plan (or re-plan)       │
+│      │                                                          │
+│      ▼                                                          │
+│  constitution check  — every step checked against safety rules  │
+│      │ (blocked → NEEDS_HUMAN, no retry)                        │
+│      ▼                                                          │
+│  executor.py         — execute plan steps sequentially          │
+│      │ (step fails → re-plan if rounds remain)                  │
+│      ▼                                                          │
+│  verifier.py         — post-execution checks                    │
+│      │ (fails → re-plan if rounds remain)                       │
+│                                                                 │
+└─────────────────── exhausted → NEEDS_HUMAN ────────────────────┘
+    │ (success)
     ▼
 git_ops.py          — stage + commit + push + create PR
     │
@@ -124,3 +129,64 @@ NEEDS_HUMAN status set
 - **Worktree cleanup is always attempted** — even if execution fails mid-way, the worktree is removed to prevent accumulation.
 - **Max file changes per task** — enforced by directive `max_file_changes_per_task`. Plans with more steps are truncated.
 - **LLM fallback plan** — if planning fails (LLM error, parse error), a zero-step `TaskPlan` is returned. The task does not crash; it simply does nothing and logs a warning.
+
+## Plan-Execute-Replan
+
+> Origin: [`docs/plans/2026-03-06-plan-execute-replan.md`](../plans/2026-03-06-plan-execute-replan.md)
+
+### Problem
+
+The current pipeline is one-shot: plan once, execute, verify. Any failure at execution or verification immediately moves the task to `NEEDS_HUMAN`. The agent cannot recover from errors that the LLM could fix if given the failure context — wrong file content, inter-step dependency issues, or test failures.
+
+### Design
+
+A bounded re-plan loop wraps the existing plan → execute → verify sequence:
+
+```
+Task ──> PLAN (LLM) ──> EXECUTE (steps) ──> VERIFY (checks)
+              ^              │                    │
+              │         fail │               fail │
+              │              v                    v
+              │         ROUND CHECK: round < max?
+              │              │ yes           │ no
+              └── REPLAN ◄───┘               v
+                                        NEEDS_HUMAN
+```
+
+**Key properties:**
+
+- **Bounded** — `directive.max_replan_rounds` (default 3) caps retry attempts. Set to 1 for one-shot behavior.
+- **Incremental** — re-plan receives the execution history and operates on cumulative worktree state. It generates only corrective steps, not a full re-do.
+- **Observable** — three structured events: `replan_triggered`, `replan_created`, `replan_exhausted`.
+- **Safe** — every re-plan passes constitution check. Every step passes SafetyPolicy. No safety invariants are relaxed.
+- **Token-controlled** — three layers: global budget (`BudgetExhaustedError`), per-task cap (`directive.max_tokens_per_task`), round limit.
+
+### Re-plan Triggers
+
+| Trigger | Behavior |
+|---------|----------|
+| Step execution failure | Re-plan with execution history |
+| Verification failure | Re-plan with verification output |
+| Constitution block | NEEDS_HUMAN (no retry — requires human strategy change) |
+| Safety block | NEEDS_HUMAN (no retry) |
+| Round limit exceeded | NEEDS_HUMAN (with full `replan_history`) |
+| Per-task token cap exceeded | NEEDS_HUMAN |
+
+### Components Affected
+
+- **`core/models.py`** — `ExecutionRound` dataclass, `Task.replan_history` field, `Directive.max_replan_rounds` + `Directive.max_tokens_per_task`
+- **`llm/prompts/replan_task.txt`** — re-plan prompt template (same output format as `plan_task.txt`)
+- **`execution/planner.py`** — `replan_task_with_constitution()`, `format_execution_history_for_replan()`
+- **`observability/observer.py`** — three new convenience emitters
+- **`agent.py`** — `_plan_execute_verify_loop()` extracted from `_execute_single_task()`
+- **`storage/store.py`** — migration: `ALTER TABLE tasks ADD COLUMN replan_history TEXT DEFAULT ''`
+
+### What Does NOT Change
+
+- `PlanExecutor` internal logic (remains a pure step executor)
+- `SafetyPolicy` / `Constitution` enforcement
+- `TaskStatus` enum (re-planning is internal to `EXECUTING`)
+- `GitWorkflow` (one worktree per task, created before loop, shared across rounds)
+- `verify_task()` logic
+- Discovery pipeline
+- Experience extraction (runs once after loop exits)

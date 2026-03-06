@@ -54,6 +54,19 @@ class Task:
     time_cost_seconds: float = 0.0
     whats_learned: str = ""
     human_help_request: str = ""
+    replan_history: str = ""
+
+
+@dataclass
+class ExecutionRound:
+    """One round of the plan-execute-verify loop, stored for observability."""
+
+    round_number: int
+    plan_steps: List[Dict[str, str]]
+    results: List[Dict[str, str]]
+    verification: str
+    trigger: str  # "step_failure" | "verification_failure"
+    token_cost: int = 0
 
 
 @dataclass
@@ -101,3 +114,5 @@ class Directive:
     custom_instructions: str = ""
     task_sources: Dict[str, TaskSourceConfig] = field(default_factory=dict)
     poll_interval_seconds: int = 120
+    max_replan_rounds: int = 3
+    max_tokens_per_task: int = 0

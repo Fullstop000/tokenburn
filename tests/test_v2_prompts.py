@@ -18,7 +18,8 @@ class TestListTemplates(unittest.TestCase):
         self.assertIn("discover_stale_area", names)
         self.assertIn("discover_deep_review", names)
         self.assertIn("discover_llm_guided", names)
-        self.assertEqual(len(names), 7)
+        self.assertIn("replan_task", names)
+        self.assertEqual(len(names), 8)
 
 
 class TestGetTemplateSource(unittest.TestCase):

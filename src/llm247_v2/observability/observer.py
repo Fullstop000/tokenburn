@@ -385,6 +385,26 @@ class Observer:
             success=True,
         ))
 
+    def replan_triggered(self, task_id: str, round_number: int, trigger: str) -> None:
+        self.emit(AgentEvent(
+            phase="plan", action="replan_triggered", task_id=task_id,
+            detail=f"round={round_number} trigger={trigger}",
+        ))
+
+    def replan_created(self, task_id: str, round_number: int, step_count: int) -> None:
+        self.emit(AgentEvent(
+            phase="plan", action="replan_created", task_id=task_id,
+            detail=f"round={round_number} steps={step_count}",
+            success=True,
+        ))
+
+    def replan_exhausted(self, task_id: str, total_rounds: int) -> None:
+        self.emit(AgentEvent(
+            phase="plan", action="replan_exhausted", task_id=task_id,
+            detail=f"exhausted after {total_rounds} rounds",
+            success=False,
+        ))
+
     def plan_blocked(self, task_id: str, reason: str) -> None:
         self.emit(AgentEvent(
             phase="plan", action="constitution_blocked", task_id=task_id,

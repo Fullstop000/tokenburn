@@ -39,6 +39,64 @@ def plan_task_with_constitution(
     return _call_and_parse_plan(llm, prompt, task, directive)
 
 
+def replan_task_with_constitution(
+    task: Task,
+    workspace: Path,
+    directive: Directive,
+    constitution: Constitution,
+    llm: LLMClient,
+    executed_steps: str,
+    verification_output: str,
+    trigger: str,
+    round_number: int,
+    remaining_rounds: int,
+) -> TaskPlan:
+    """Generate a corrective plan based on previous execution failure."""
+    prompt = render_prompt(
+        "replan_task",
+        constitution_section=constitution.to_compact_prompt(),
+        task_title=task.title,
+        task_description=task.description,
+        task_source=task.source,
+        round_number=str(round_number),
+        executed_steps=executed_steps,
+        trigger=trigger,
+        verification_output=verification_output or "(no verification — execution failed before verify)",
+        remaining_rounds=str(remaining_rounds),
+        directive_section=directive_to_prompt_section(directive),
+        max_file_changes=str(directive.max_file_changes_per_task),
+    )
+    return _call_and_parse_plan(llm, prompt, task, directive)
+
+
+def format_execution_history_for_replan(results, plan_steps=None) -> str:
+    """Format execution results for inclusion in a re-plan prompt.
+
+    Includes step action, target, status, and output. For write steps that
+    succeeded, notes the file was written but omits full content to save tokens.
+    Emphasizes failure details.
+    """
+    lines: list[str] = []
+    for r in results:
+        status = "OK" if r.success else "FAIL"
+        line = f"[{r.step_index}] {status} {r.action} {r.target}"
+
+        if not r.success:
+            lines.append(line)
+            if r.output:
+                for out_line in r.output.splitlines()[:20]:
+                    lines.append(f"    {out_line}")
+        elif r.action in ("edit_file", "create_file"):
+            lines.append(f"{line} (file written successfully)")
+        else:
+            lines.append(line)
+            if r.output:
+                for out_line in r.output.splitlines()[:5]:
+                    lines.append(f"    {out_line}")
+
+    return "\n".join(lines)
+
+
 def plan_task(task: Task, workspace: Path, directive: Directive, llm: LLMClient) -> TaskPlan:
     """Legacy entry point without constitution — for backward compatibility."""
     from llm247_v2.core.constitution import _default_constitution
