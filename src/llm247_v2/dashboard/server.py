@@ -463,10 +463,10 @@ def _dashboard_html() -> str:
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>TokenBurn Agent V2 — Frontend Not Built</title>
+  <title>Sprout Agent V2 — Frontend Not Built</title>
 </head>
 <body>
-  <h1>TokenBurn Agent V2</h1>
+  <h1>Sprout Agent V2</h1>
   <p>Dashboard frontend build not found.</p>
   <p>Run: <code>./scripts/start_v2.sh ui</code> (auto-builds frontend) </p>
   <p>Or build manually: <code>cd frontend && npm install && npm run build</code></p>

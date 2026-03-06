@@ -425,9 +425,9 @@ Imagine a curious engineer who never sleeps. Someone who wanders through the cod
 
 But what makes them truly exceptional is not just curiosity — it's growth. They keep a journal of every mistake, every pattern that worked, every insight about the system. When they encounter a new problem, they don't start from zero — they draw on everything they've learned before. The engineer you hired on day one is not the same engineer working on day ninety. They are sharper, faster, and wiser, because every task they completed taught them something they carry forward.
 
-That's TokenBurn.
+That's Sprout.
 
-> **An autonomous engineering agent that discovers what interests it, builds and verifies solutions on its own, learns from every outcome, evolves through experience, and runs 24/7 — turning every token it consumes into compounding engineering intelligence.**
+> **An autonomous engineering agent that discovers what interests it, builds and verifies solutions on its own, learns from every outcome, evolves through experience, and runs 24/7 — a seed that grows into compounding engineering intelligence.**
 
 ### The Five Pillars
 
@@ -455,166 +455,50 @@ Curiosity without accountability is recklessness. Every action the agent takes i
 
 ---
 
-## V2 Architecture (2026-03-05)
+## V2 Architecture
 
-### Module Map
+See design docs for full details:
 
-```
-src/llm247_v2/
-├── __init__.py              # Package summary and layout docs
-├── __main__.py              # CLI entry point (imports from submodules)
-├── agent.py                 # Main orchestrator: the cycle loop
-│
-├── core/                    # Shared base layer
-│   ├── __init__.py
-│   ├── models.py            # Core data models (Task, Directive, TaskPlan, CycleReport)
-│   ├── constitution.py      # Immutable principles — the agent's DNA
-│   └── directive.py         # Runtime behavior control (paused, focus, forbidden paths)
-│
-├── llm/                     # LLM client + prompt templates
-│   ├── __init__.py
-│   ├── client.py            # LLM protocol + Ark adapter + TokenTracker + AuditLogger
-│   └── prompts/
-│       ├── __init__.py      # Template loader + renderer
-│       ├── plan_task.txt
-│       ├── assess_value.txt
-│       ├── extract_learnings.txt
-│       ├── discover_stale_area.txt
-│       ├── discover_deep_review.txt
-│       ├── discover_llm_guided.txt
-│       └── discover_web_search.txt
-│
-├── storage/                 # SQLite persistence
-│   ├── __init__.py
-│   ├── store.py             # Tasks/events/cycles
-│   └── experience.py        # Long-term memory and learning extraction
-│
-├── observability/           # Event observation layer
-│   ├── __init__.py
-│   └── observer.py          # Centralized event system (log, JSONL, SQLite, console)
-│
-├── discovery/               # Task discovery pipeline
-│   ├── __init__.py
-│   ├── pipeline.py          # Strategy orchestration and candidate ranking
-│   ├── exploration.py       # ExplorationMap — tracks visited areas
-│   ├── value.py             # Value assessment — heuristic + LLM scoring
-│   └── interest.py          # Interest profile + issue discovery sources
-│
-├── execution/               # Planning and execution pipeline
-│   ├── __init__.py
-│   ├── planner.py           # LLM-driven execution plan generation
-│   ├── executor.py          # Safe action execution (edit, create, run, delete)
-│   ├── verifier.py          # Post-execution verification (syntax, tests, secrets)
-│   ├── git_ops.py           # Git workflow (worktree isolation, branch, commit, push, PR)
-│   └── safety.py            # Command allowlist + path protection
-│
-└── dashboard/               # HTTP control plane
-    ├── __init__.py
-    └── server.py            # Dashboard server and API
-```
+- [docs/design/evolution.md](docs/design/evolution.md) — **architecture evolution roadmap: five cognitive layers, phased plan**
+- [docs/design/architecture.md](docs/design/architecture.md) — module map, cycle, memory stack
+- [docs/design/observability.md](docs/design/observability.md) — event system, LLM audit trail, human review protocol
+- [docs/design/discovery.md](docs/design/discovery.md) — exploration strategies, interest profile, value scoring
+- [docs/design/execution.md](docs/design/execution.md) — planner, executor, verifier, git worktree isolation, NEEDS_HUMAN flow
+- [docs/design/experience.md](docs/design/experience.md) — long-term memory, recall, structured organization
 
-### The Cycle
+---
 
-Every cycle is a complete unit of work. The agent runs cycles indefinitely until paused or budget-exhausted.
+## Documentation Conventions
 
-```
-┌─────────────────────────────────────────────────────────┐
-│                     One Agent Cycle                      │
-│                                                         │
-│  1. Load Directive    ─── paused? → sleep and retry     │
-│  2. Load Constitution ─── immutable safety rules        │
-│  3. DISCOVER          ─── select strategy → scan →      │
-│                           evaluate → rank → queue       │
-│  4. EXECUTE           ─── pick top task → plan (LLM) →  │
-│                           constitution check → worktree │
-│                           → execute steps → verify      │
-│  5. SHIP              ─── commit → push → create PR     │
-│  6. LEARN             ─── extract learnings → store     │
-│  7. OBSERVE           ─── emit events to all handlers   │
-│                                                         │
-│  (sleep poll_interval, then repeat)                     │
-└─────────────────────────────────────────────────────────┘
-```
+### Design Documents (`docs/design/`)
 
-### Memory Stack
+**Rule:** Every core module MUST have a design document in `docs/design/<module>.md`. The design doc is the authoritative reference for the module's purpose, data model, integration points, known limitations, and architectural decisions.
+**Why:** Code explains how; design docs explain why. Without them, every non-trivial architectural decision has to be re-derived from reading the code.
 
-The agent has five layers of memory, from immediate to permanent:
+**What belongs in a design doc:**
+- Purpose and responsibilities
+- Current design (data model, read/write paths, key algorithms)
+- Known limitations
+- Planned or in-progress changes (with links to `docs/plans/` for full specs)
+- Integration points (who calls this module and how)
+- Design constraints that must not be violated
 
-| Layer | Module | Storage | Scope | Purpose |
-|-------|--------|---------|-------|---------|
-| **Event stream** | Observer | `activity.log`, `activity.jsonl` | Instant | Real-time monitoring (`tail -f`) |
-| **LLM audit trail** | LLMAuditLogger | `llm_audit.jsonl` | Instant | Full prompt/response for every LLM call |
-| **Task history** | TaskStore | `tasks.db` | Per-task | Status, plan, execution log, costs, errors |
-| **Exploration map** | ExplorationMap | `exploration_map.json` | Cross-cycle | Which areas explored, which strategies worked |
-| **Interest profile** | InterestProfile | `interest_profile.json` | Cross-cycle | What the agent is curious about, derived from experience + exploration |
-| **Experience** | ExperienceStore | `experience.db` | Permanent | Patterns, pitfalls, insights, techniques (with consolidation) |
+**Current design docs:**
+- `docs/design/evolution.md` — Architecture evolution roadmap: five cognitive layers, phased plan
+- `docs/design/architecture.md` — Module map, agent cycle, memory stack
+- `docs/design/core.md` — Data models (Task, TaskPlan), constitution, directive
+- `docs/design/llm.md` — LLM client protocol, ARK adapter, token tracking, audit logging, prompt templates
+- `docs/design/storage.md` — TaskStore schema, task state machine, migrations
+- `docs/design/observability.md` — Event system, LLM audit trail, human review protocol
+- `docs/design/discovery.md` — Exploration strategies, interest profile, value scoring
+- `docs/design/execution.md` — Planner, executor, verifier, git worktree isolation, NEEDS_HUMAN flow
+- `docs/design/experience.md` — Long-term memory, recall, structured organization
+- `docs/design/dashboard.md` — API endpoints, help center flow, frontend serving
 
-No layer is redundant. Each serves a different time horizon and consumer:
-- **Event stream + LLM audit**: for human real-time review ("what is the agent doing right now?")
-- **Task history**: for human post-mortem review ("what happened with task X?")
-- **Exploration map**: for the agent itself ("where should I look next?")
-- **Interest profile**: for the agent itself ("what am I curious about?")
-- **Experience**: for the agent itself ("what did I learn that applies here?")
+### Implementation Plans (`docs/plans/`)
 
-### Observability Architecture
-
-The Observer module is the single point through which all agent actions become visible:
-
-```
-  Agent code
-      │
-      ▼
-  Observer.emit(AgentEvent)
-      │
-      ├──→ HumanLogHandler   → .llm247_v2/activity.log     (tail -f friendly)
-      ├──→ JsonLogHandler     → .llm247_v2/activity.jsonl   (jq-queryable)
-      ├──→ StoreHandler       → tasks.db / task_events      (per-task audit)
-      └──→ ConsoleHandler     → stderr                       (colored terminal)
-```
-
-Additionally, the LLMAuditLogger captures every LLM call independently:
-
-```
-  ArkLLMClient.generate_tracked()
-      │
-      └──→ LLMAuditLogger    → .llm247_v2/llm_audit.jsonl  (full prompts + responses)
-```
-
-### Discovery Intelligence
-
-Task discovery uses a three-layer architecture:
-
-1. **Exploration Module** — Selects a strategy based on what areas are under-explored, what strategies have been productive, and what the directive focuses on. Twelve strategies: `todo_sweep`, `test_coverage`, `change_hotspot`, `complexity_scan`, `stale_area`, `deep_module_review`, `dependency_review`, `llm_guided`, `github_issues`, `dep_audit`, `web_search`, `interest_driven`.
-
-2. **Interest Module** — The agent's curiosity engine. Builds an `InterestProfile` from three signals: (a) directive focus_areas (human-set), (b) experience patterns (which areas were productive), (c) exploration yield (which strategies found high-value tasks). The profile guides `interest_driven` and `web_search` discovery.
-
-3. **Issue Sources** — Four external/semi-external issue pipelines:
-   - `github_issues` — pulls from `gh issue list`, maps labels to priority
-   - `dep_audit` — runs `pip audit` for known CVEs in dependencies
-   - `web_search` — LLM-powered analysis of the stack for security advisories, deprecations, and best practices
-   - `interest_driven` — generates tasks from the agent's evolved interest profile
-
-4. **Value Module** — Two-tier scoring. Fast heuristic pass (severity, alignment, scope, actionability) filters out obvious low-value candidates. LLM-based deep assessment ranks the top candidates on impact, feasibility, risk, and alignment.
-
-5. **Decision Logging** — Every candidate, every score, every rejection reason is emitted through Observer so humans can trace the full discovery funnel: `raw → heuristic filter → LLM assessment → final selection`.
-
-### Self-Modification Safety
-
-The agent modifies its own code through **git worktree isolation**:
-
-```
-Main workspace (agent running here, never modified directly)
-      │
-      └── git worktree add .worktrees/<task-id> -b agent/<task-id>-<name>
-               │
-               └── All file edits happen here
-                    │
-                    ├── git commit + push
-                    ├── gh pr create
-                    └── git worktree remove (cleanup)
-```
-
-The main workspace is never touched during execution. If the worktree creation fails (e.g., not a git repo), the agent falls back to in-place execution with standard branch isolation.
+**Rule:** Significant changes to existing modules or new subsystems MUST have an implementation plan in `docs/plans/YYYY-MM-DD-<slug>.md` before any code is written.
+**Why:** Plans are written when context is fresh and scope is clear. They prevent scope creep during implementation and serve as a record of decisions made.
 
 ---
 

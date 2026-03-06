@@ -48,7 +48,7 @@ def _configure_logging(log_path: Path) -> None:
 
 
 def parse_args() -> argparse.Namespace:
-    p = argparse.ArgumentParser(description="TokenBurn Agent V2 — Autonomous 24/7 engineering agent")
+    p = argparse.ArgumentParser(description="Sprout Agent V2 — Autonomous 24/7 engineering agent")
     p.add_argument("--once", action="store_true", help="Run one cycle and exit")
     p.add_argument("--max-cycles", type=int, default=None, help="Max number of cycles before stopping")
     p.add_argument("--ui", action="store_true", help="Run dashboard UI only")
@@ -88,7 +88,7 @@ def main() -> int:
 
     _configure_logging(log_path)
     logger = logging.getLogger("llm247_v2")
-    logger.info("TokenBurn Agent V2 starting workspace=%s", workspace)
+    logger.info("Sprout Agent V2 starting workspace=%s", workspace)
 
     from llm247_v2.storage.store import TaskStore
     store = TaskStore(db_path)

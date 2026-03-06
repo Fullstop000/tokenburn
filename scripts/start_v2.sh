@@ -11,7 +11,7 @@ cd "$PROJECT_DIR"
 
 usage() {
     cat <<'EOF'
-TokenBurn Agent V2 — Autonomous 24/7 Engineering Agent
+Sprout Agent V2 — Autonomous 24/7 Engineering Agent
 
 Usage:
   ./scripts/start_v2.sh agent        Run agent loop (24/7 autonomous mode)
@@ -130,7 +130,7 @@ cleanup_vite() {
 
 case "${1:-help}" in
     agent)
-        echo "Starting TokenBurn Agent V2..."
+        echo "Starting Sprout Agent V2..."
         PYTHONPATH=src exec python3 -m llm247_v2
         ;;
 

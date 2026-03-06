@@ -265,7 +265,7 @@ class GitWorkflow:
     def _ensure_self_exec_pr_body(self, body: str) -> str:
         """Prefix PR body to make autonomous execution explicit in PR content."""
         normalized = (body or "").strip()
-        prefix_line = f"{SELF_EXEC_PREFIX} This change was self-executed by TokenBurn agent."
+        prefix_line = f"{SELF_EXEC_PREFIX} This change was self-executed by Sprout agent."
 
         if not normalized:
             return prefix_line

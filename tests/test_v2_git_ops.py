@@ -143,7 +143,7 @@ class TestGitWorkflow(unittest.TestCase):
         title = captured_gh_cmd["cmd"][captured_gh_cmd["cmd"].index("--title") + 1]
         body = captured_gh_cmd["cmd"][captured_gh_cmd["cmd"].index("--body") + 1]
         self.assertEqual(title, "[self-exec] Fix bug")
-        self.assertTrue(body.startswith("[self-exec] This change was self-executed by TokenBurn agent."))
+        self.assertTrue(body.startswith("[self-exec] This change was self-executed by Sprout agent."))
 
     def test_merge_message_prefix_is_idempotent(self):
         message = self.git._ensure_self_exec_merge_message("[self-exec] Keep prefix")

@@ -481,7 +481,7 @@ function DashboardRoot() {
     <main className="app-shell">
       <header className="hero">
         <div>
-          <p className="eyebrow">TokenBurn Agent V2</p>
+          <p className="eyebrow">Sprout Agent V2</p>
           <h1>Control Plane</h1>
         </div>
         <div className="hero-actions">

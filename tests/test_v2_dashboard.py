@@ -267,7 +267,7 @@ class TestDashboardServer(unittest.TestCase):
         try:
             resp = urllib.request.urlopen(f"http://127.0.0.1:{port}/")
             html = resp.read().decode()
-            self.assertIn("TokenBurn Agent V2", html)
+            self.assertIn("Sprout Agent V2", html)
             if "/assets/dashboard.js" in html:
                 self.assertIn("id=\"root\"", html)
                 js_resp = urllib.request.urlopen(f"http://127.0.0.1:{port}/assets/dashboard.js")
