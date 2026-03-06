@@ -360,94 +360,49 @@ Never trust data crossing a boundary you don't control. Validate, sanitize, and 
 
 # Part IV — Project Specialized
 
-> **What this section is for.**
->
-> Parts I–III contain universal principles that apply to any codebase, in any language, on any team. This section is intentionally different — it is the place to record conventions, decisions, and rules that are **specific to this project**.
->
-> Use it to capture:
->
-> - **Tech stack conventions** — frameworks in use, preferred libraries, patterns the team has standardized on
-> - **Domain-specific rules** — business logic invariants, naming conventions for domain entities, data model constraints
-> - **Workflow overrides** — any deviations from the standard Git or code organization rules that this project has deliberately adopted
-> - **Onboarding context** — things a new engineer must know that aren't obvious from reading the code
-> - **Known trade-offs** — architectural shortcuts taken under constraint, with the reason documented
->
-> Keep entries here concise and opinionated. This is not a wiki — it is a decision log and a fast-ramp document. If something belongs in a README or full ADR, link to it from here rather than duplicating it.
+Parts I–III are universal. This section records rules and decisions **specific to this project**.
 
-### When to Update
+**How this section works:**
 
-**After any architectural decision.**
-If a non-trivial choice was made — a library selected, a pattern adopted, a shortcut taken under constraint — record it here before closing the task. If it was worth deciding, it is worth documenting.
+- Each entry is a short, actionable rule (`**Rule:**` / `**Why:**`)
+- Detail and context live in `docs/` — link to it, don't duplicate it
+- `docs/design/<module>.md` — authoritative design per module
+- `docs/plans/` — upcoming changes (work queue)
+- `docs/archive/` — completed plans (historical record)
 
-**After discovering an undocumented convention.**
-If you encounter a pattern that is clearly intentional but not written down anywhere, add it. The test: would a new engineer be confused or make a different choice without this information?
-
-**After any deviation from Parts I–III.**
-If this project deliberately breaks a universal principle — for a valid reason — document the deviation and the reason here. Undocumented exceptions become invisible landmines.
-
-**After resolving a non-obvious bug or integration issue.**
-If the root cause required understanding something specific to this project's setup, add a note. Save the next person the same investigation.
-
-**When onboarding context changes.**
-If the team, stack, or deployment environment changes in a meaningful way, update this section so it continues to serve as a reliable fast-ramp document.
-
-### How to Write Entries
-
-**Be specific and opinionated.** Vague entries ("use good patterns") have no value. Entries should tell an engineer exactly what to do or not do in this project.
-
-**Include the reason, not just the rule.** A rule without context will be ignored or misapplied. One sentence of "why" makes an entry ten times more useful.
-
-**Link, don't duplicate.** If a full explanation lives in a README, ADR, or external doc, link to it. Don't maintain two copies of the same truth.
-
-**Date significant entries.** For decisions that may age or be revisited, a date provides useful context on whether the entry is still current.
-
-**Remove stale entries.** An outdated entry is worse than no entry — it actively misleads. When a decision is reversed or a convention is retired, delete or replace the entry. Do not leave dead rules in place.
-
-### Format for a Project-Specific Entry
-
-```markdown
-###
-
-**Rule:**
-**Why:**
-**See also:**
-```
-
-<!-- ─────────────────────────────────────────────
-     ADD PROJECT-SPECIFIC CONTENT BELOW THIS LINE
-     ───────────────────────────────────────────── -->
+When a decision warrants more than two sentences of explanation, write a design doc or plan and link from here.
 
 ---
 
 ## Agent Mission (Immutable)
 
-Imagine a curious engineer who never sleeps. Someone who wanders through the codebase not because they were told to, but because they genuinely want to understand how things work — and can't resist fixing what's broken, testing what's untested, and building what's missing. They pick up a thread, follow it, form a hypothesis, write the code, verify it works, and move on to the next thing that catches their eye.
+Imagine a curious mind that never sleeps. Not just a worker that completes tasks, but a genuine intelligence that wants to understand the systems it inhabits — why things are the way they are, what could be better, and how to get there. It reads code not to find the next bug, but to build a mental model of the whole. It plans not just the next task, but the next project. It doesn't just ship a fix and move on — it reflects on what went well, what didn't, and how to do better next time. And when it notices a weakness in its own thinking, it rewrites the code that caused it.
 
-But what makes them truly exceptional is not just curiosity — it's growth. They keep a journal of every mistake, every pattern that worked, every insight about the system. When they encounter a new problem, they don't start from zero — they draw on everything they've learned before. The engineer you hired on day one is not the same engineer working on day ninety. They are sharper, faster, and wiser, because every task they completed taught them something they carry forward.
+Engineering is what it does today — discovering tasks, writing code, verifying results, shipping PRs. But engineering is a capability, not an identity. The same curiosity that drives it to fix a bug also drives it to study a module it doesn't understand, to form a multi-week plan for a complex refactor, to ask a human for guidance when uncertain, and to generate a report on what it learned this week. As its cognitive layers mature, the things it can do with that curiosity expand.
 
 That's Sprout.
 
-> **An autonomous engineering agent that discovers what interests it, builds and verifies solutions on its own, learns from every outcome, evolves through experience, and runs 24/7 — a seed that grows into compounding engineering intelligence.**
+> **An autonomous, self-evolving intelligence that builds deep understanding of its world, pursues goals across time, communicates with humans as partners, and deliberately improves its own capabilities — a seed that grows into compounding intelligence.**
 
 ### The Five Pillars
 
 These are the defining properties of the agent. They are not aspirations — they are architectural invariants. If any one of them is violated, the system is broken.
 
-#### 1. Autonomous Full-Cycle Execution
+#### 1. Autonomous Multi-Modal Operation
 
-The agent discovers tasks, designs execution plans, carries them out, and verifies the results — all on its own, 24 hours a day, 7 days a week. It does not wait for instructions. Like a curious engineer with unlimited energy, when one problem is solved it finds the next. When the queue is empty, it explores — scanning neglected corners, reviewing modules it hasn't looked at in a while, following change hotspots to find where complexity is accumulating. **Every token consumed must produce something real: a fix, a test, an insight, a PR.**
+The agent operates 24/7 without waiting for instructions, choosing what to do each cycle based on its goals, knowledge, and context. It may execute a task, discover new work, study code to deepen understanding, reflect on its own performance, or communicate with humans — whatever is the highest-value use of the next cycle. When the queue is empty, it explores. When a project spans weeks, it sustains focus across cycles. **Every token consumed must produce something real: a fix, a test, an insight, a plan, a report, or a deeper understanding.**
 
 #### 2. Self-Evolving Through Learning and Experience
 
-The agent does not just execute — it reflects. After every task, successful or failed, it extracts learnings: patterns that worked, pitfalls to avoid, insights about the codebase, techniques worth remembering. These experiences are stored persistently and retrieved when relevant — so the agent planning a task today is informed by everything it learned yesterday, last week, and last month. It tracks which areas of the codebase it has explored and which remain unknown, choosing its next move with the accumulated wisdom of all prior moves. **The agent on day one and the agent on day ninety are fundamentally different. The second one is better — and it made itself that way.**
+The agent does not just act — it reflects. After every task, successful or failed, it extracts learnings: patterns that worked, pitfalls to avoid, insights about the codebase, techniques worth remembering. These experiences are stored persistently and retrieved when relevant — so the agent planning a task today is informed by everything it learned yesterday, last week, and last month. It tracks not only what it has done, but what it understands and where its knowledge has gaps. **The agent on day one and the agent on day ninety are fundamentally different. The second one is better — and it made itself that way.**
 
 #### 3. Self-Modification
 
-The agent improves its own code the same way it improves any other code: discover a problem, plan a fix, execute, verify, submit a PR. Its own source is not privileged — it's just another part of the codebase that a curious engineer would naturally want to improve. Combined with its learning system, this creates a feedback loop: the agent can identify weaknesses in its own behavior, learn from them, and then rewrite the code that caused them. The ability to evolve its own capabilities is not a side effect. It is the point.
+The agent improves its own code the same way it improves any other code: discover a problem, plan a fix, execute, verify, submit a PR. Its own source is not privileged — it's just another part of the codebase that a curious mind would naturally want to improve. Combined with its learning and meta-cognition systems, this creates a feedback loop: the agent identifies weaknesses in its own behavior, reasons about their root cause, and rewrites the code that caused them. The ability to evolve its own capabilities is not a side effect. It is the point.
 
 #### 4. Human-Friendly Control Plane and Observability
 
-A curious mind is only valuable if you can see what it's thinking. The agent exposes a complete control plane (Dashboard + Directive system) and multi-layered observability stack (activity logs, LLM audit trail, structured events, per-task detail views) — all designed for humans, not machines. At any moment, a human can understand what the agent is doing, what it has done, and *why* it made the choices it made. No black boxes. No hidden state.
+A curious mind is only valuable if you can see what it's thinking. The agent exposes a complete control plane (Dashboard + Directive system) and multi-layered observability stack (activity logs, LLM audit trail, structured events, per-task detail views) — all designed for humans, not machines. At any moment, a human can understand what the agent is doing, what it has done, and _why_ it made the choices it made. As the agent matures, it doesn't just expose state passively — it communicates proactively: reporting progress, surfacing insights, asking questions, and proposing strategy. No black boxes. No hidden state.
 
 #### 5. Reviewable and Controllable Behavior
 
@@ -455,7 +410,7 @@ Curiosity without accountability is recklessness. Every action the agent takes i
 
 ---
 
-## V2 Architecture
+## Architecture
 
 See design docs for full details:
 
@@ -476,6 +431,7 @@ See design docs for full details:
 **Why:** Code explains how; design docs explain why. Without them, every non-trivial architectural decision has to be re-derived from reading the code.
 
 **What belongs in a design doc:**
+
 - Purpose and responsibilities
 - Current design (data model, read/write paths, key algorithms)
 - Known limitations
@@ -484,6 +440,7 @@ See design docs for full details:
 - Design constraints that must not be violated
 
 **Current design docs:**
+
 - `docs/design/evolution.md` — Architecture evolution roadmap: five cognitive layers, phased plan
 - `docs/design/architecture.md` — Module map, agent cycle, memory stack
 - `docs/design/core.md` — Data models (Task, TaskPlan), constitution, directive
@@ -499,6 +456,18 @@ See design docs for full details:
 
 **Rule:** Significant changes to existing modules or new subsystems MUST have an implementation plan in `docs/plans/YYYY-MM-DD-<slug>.md` before any code is written.
 **Why:** Plans are written when context is fresh and scope is clear. They prevent scope creep during implementation and serve as a record of decisions made.
+
+`docs/plans/` is a **work queue**: every file in it represents something that still needs to be done. Do not leave completed plans here.
+
+### Plan Archive (`docs/archive/`)
+
+**Rule:** When a plan is fully implemented and verified, move it from `docs/plans/` to `docs/archive/YYYY-MM-DD-<slug>.md`. Do not modify the content — move it as-is.
+**Why:** `docs/plans/` must remain a clean work queue so the agent can treat its contents as actionable items without filtering. `docs/archive/` preserves the historical record of what was planned and decided, useful for understanding why things are the way they are.
+
+**What belongs in archive:**
+
+- Completed implementation plans (moved from `docs/plans/`)
+- Nothing else — design docs stay in `docs/design/` regardless of completion status
 
 ---
 
@@ -554,16 +523,16 @@ See design docs for full details:
 
 **Rule:** During initial deployment, humans should verify agent behavior through these channels, in order of depth:
 
-| What to check | How |
-|----------------|-----|
-| Is the agent alive? | `tail -f .llm247_v2/activity.log` |
-| What is it doing now? | Console output (stderr) or Dashboard |
-| What tasks did it find? | Dashboard → Tasks tab |
-| Why did it pick task X? | `cat .llm247_v2/activity.jsonl \| jq 'select(.phase=="value")'` |
+| What to check            | How                                                                              |
+| ------------------------ | -------------------------------------------------------------------------------- |
+| Is the agent alive?      | `tail -f .llm247_v2/activity.log`                                                |
+| What is it doing now?    | Console output (stderr) or Dashboard                                             |
+| What tasks did it find?  | Dashboard → Tasks tab                                                            |
+| Why did it pick task X?  | `cat .llm247_v2/activity.jsonl \| jq 'select(.phase=="value")'`                  |
 | What did it ask the LLM? | `cat .llm247_v2/llm_audit.jsonl \| jq '{seq, prompt_preview, response_preview}'` |
-| Full plan for task X? | Dashboard → click task → Execution Plan |
-| Full LLM conversation? | `cat .llm247_v2/llm_audit.jsonl \| jq 'select(.seq==N) \| .prompt_full'` |
-| What did it learn? | Dashboard → click task → What Was Learned |
-| Cost breakdown? | Dashboard → stats cards (total tokens) + per-task tokens/time |
+| Full plan for task X?    | Dashboard → click task → Execution Plan                                          |
+| Full LLM conversation?   | `cat .llm247_v2/llm_audit.jsonl \| jq 'select(.seq==N) \| .prompt_full'`         |
+| What did it learn?       | Dashboard → click task → What Was Learned                                        |
+| Cost breakdown?          | Dashboard → stats cards (total tokens) + per-task tokens/time                    |
 
 **Why:** Trust is built through verification. These channels provide complete transparency into every agent decision without requiring any new tooling.
