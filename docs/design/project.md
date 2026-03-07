@@ -49,7 +49,7 @@ Every prompt sent to the LLM must live in `src/llm247_v2/llm/prompts/*.txt` and 
 
 ### Git Workflow For Self-Modification
 
-The agent creates feature branches with the `agent/<task-id>-<name>` prefix. All code changes go through commit, push, and PR. Force-push and direct push to `main` or `master` are blocked by `SafetyPolicy`.
+Sprout agent-created branches use the `{agent}/<task-id>-<name>` shape. All code changes go through commit, push, and PR. Force-push and direct push to `main` or `master` are blocked by `SafetyPolicy`.
 
 ### Persistence
 
