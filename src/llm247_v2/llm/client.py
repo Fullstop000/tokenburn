@@ -11,7 +11,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable, Protocol, Tuple
 
-from llm247_v2.core.models import ModelType, RegisteredModel
+from llm247_v2.core.models import ModelType, RegisteredModel, ToolCall
 
 logger = logging.getLogger("llm247_v2.llm")
 
@@ -29,8 +29,18 @@ class LLMClient(Protocol):
 
     def generate(self, prompt: str) -> str: ...
 
-    def generate_tracked(self, prompt: str) -> Tuple[str, UsageInfo]:
-        """Generate text and return token usage. Default delegates to generate()."""
+    def generate_tracked(self, prompt: str) -> Tuple[str, UsageInfo]: ...
+
+    def generate_with_tools(
+        self,
+        messages: list[dict],
+        tools: list[dict],
+    ) -> Tuple[str | None, list[ToolCall], UsageInfo]:
+        """Send a multi-turn tool-calling request.
+
+        Returns (text_content, tool_calls, usage).
+        Exactly one of text_content or tool_calls will be non-empty.
+        """
         ...
 
 
@@ -162,27 +172,11 @@ class ArkLLMClient:
                 temperature=0.7,
             )
             content = response.choices[0].message.content or ""
-            usage_info = UsageInfo()
-            raw_usage = response.usage
-            if raw_usage:
-                usage_info = UsageInfo(
-                    prompt_tokens=raw_usage.prompt_tokens or 0,
-                    completion_tokens=raw_usage.completion_tokens or 0,
-                    total_tokens=raw_usage.total_tokens or 0,
-                )
-                logger.info(
-                    "llm_call model=%s input=%d output=%d total=%d",
-                    self._model,
-                    usage_info.prompt_tokens,
-                    usage_info.completion_tokens,
-                    usage_info.total_tokens,
-                )
+            usage_info = self._extract_usage(response.usage)
             self.tracker.record(usage_info)
-
             if self._audit:
                 elapsed = int((time.monotonic() - t0) * 1000)
                 self._audit.record(prompt, content, usage_info, elapsed, model=self._model)
-
             return content, usage_info
         except Exception as exc:
             if self._audit:
@@ -191,6 +185,74 @@ class ArkLLMClient:
             if _is_budget_error(exc):
                 raise BudgetExhaustedError(str(exc)) from exc
             raise
+
+    def generate_with_tools(
+        self,
+        messages: list[dict],
+        tools: list[dict],
+    ) -> Tuple[str | None, list[ToolCall], UsageInfo]:
+        t0 = time.monotonic()
+        prompt_preview = str(messages)[:500]
+        try:
+            response = self._client.chat.completions.create(
+                model=self._model,
+                messages=messages,
+                tools=tools,
+                tool_choice="auto",
+                temperature=0.7,
+            )
+            msg = response.choices[0].message
+            usage_info = self._extract_usage(response.usage)
+            self.tracker.record(usage_info)
+
+            tool_calls: list[ToolCall] = []
+            if msg.tool_calls:
+                for tc in msg.tool_calls:
+                    try:
+                        arguments = json.loads(tc.function.arguments)
+                    except (json.JSONDecodeError, ValueError):
+                        arguments = {"_raw": tc.function.arguments}
+                    tool_calls.append(ToolCall(
+                        tool=tc.function.name,
+                        arguments=arguments,
+                    ))
+
+            text_content = msg.content or None
+
+            if self._audit:
+                elapsed = int((time.monotonic() - t0) * 1000)
+                response_preview = str(tool_calls) if tool_calls else (text_content or "")
+                self._audit.record(
+                    prompt_preview, response_preview[:500], usage_info, elapsed, model=self._model
+                )
+
+            logger.info(
+                "llm_tool_call model=%s tools=%d input=%d output=%d total=%d",
+                self._model, len(tool_calls),
+                usage_info.prompt_tokens, usage_info.completion_tokens, usage_info.total_tokens,
+            )
+            return text_content, tool_calls, usage_info
+        except Exception as exc:
+            if self._audit:
+                elapsed = int((time.monotonic() - t0) * 1000)
+                self._audit.record(prompt_preview, "", UsageInfo(), elapsed, model=self._model, error=str(exc)[:300])
+            if _is_budget_error(exc):
+                raise BudgetExhaustedError(str(exc)) from exc
+            raise
+
+    def _extract_usage(self, raw_usage) -> UsageInfo:
+        if not raw_usage:
+            return UsageInfo()
+        usage = UsageInfo(
+            prompt_tokens=raw_usage.prompt_tokens or 0,
+            completion_tokens=raw_usage.completion_tokens or 0,
+            total_tokens=raw_usage.total_tokens or 0,
+        )
+        logger.info(
+            "llm_call model=%s input=%d output=%d total=%d",
+            self._model, usage.prompt_tokens, usage.completion_tokens, usage.total_tokens,
+        )
+        return usage
 
 
 class BudgetExhaustedError(Exception):
@@ -245,12 +307,17 @@ class RoutedLLMClient:
         self.tracker = getattr(default_client, "tracker", None)
 
     def generate(self, prompt: str) -> str:
-        """Compatibility entry point that uses the default client."""
         return self._default_client.generate(prompt)
 
     def generate_tracked(self, prompt: str) -> Tuple[str, UsageInfo]:
-        """Compatibility entry point that uses the default client."""
         return self._default_client.generate_tracked(prompt)
+
+    def generate_with_tools(
+        self,
+        messages: list[dict],
+        tools: list[dict],
+    ) -> Tuple[str | None, list[ToolCall], UsageInfo]:
+        return self._default_client.generate_with_tools(messages, tools)
 
     def for_point(self, binding_point: str) -> LLMClient:
         """Return the client bound to one runtime point, or the default client."""

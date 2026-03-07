@@ -12,21 +12,24 @@ from llm247_v2.llm.prompts import (
 class TestListTemplates(unittest.TestCase):
     def test_returns_all_templates(self):
         names = list_templates()
-        self.assertIn("plan_task", names)
+        self.assertIn("react_execute", names)
         self.assertIn("assess_value", names)
         self.assertIn("extract_learnings", names)
         self.assertIn("discover_stale_area", names)
         self.assertIn("discover_deep_review", names)
         self.assertIn("discover_llm_guided", names)
-        self.assertIn("replan_task", names)
-        self.assertEqual(len(names), 8)
+
+    def test_plan_task_removed(self):
+        names = list_templates()
+        self.assertNotIn("plan_task", names)
+        self.assertNotIn("replan_task", names)
 
 
 class TestGetTemplateSource(unittest.TestCase):
     def test_returns_raw_text(self):
-        raw = get_template_source("plan_task")
+        raw = get_template_source("react_execute")
         self.assertIn("{task_title}", raw)
-        self.assertIn("{constitution_section}", raw)
+        self.assertIn("{constitution_summary}", raw)
 
     def test_missing_raises(self):
         with self.assertRaises(FileNotFoundError):
@@ -34,22 +37,18 @@ class TestGetTemplateSource(unittest.TestCase):
 
 
 class TestRender(unittest.TestCase):
-    def test_plan_task(self):
+    def test_react_execute(self):
         result = render(
-            "plan_task",
-            constitution_section="CONSTITUTION",
+            "react_execute",
             task_title="Fix bug",
             task_description="Something is broken",
             task_source="todo_scan",
-            directive_section="DIRECTIVE",
-            repo_context="FILES",
-            max_file_changes="10",
+            workspace="/repo",
+            constitution_summary="Safety first",
         )
-        self.assertIn("CONSTITUTION", result)
         self.assertIn("Fix bug", result)
         self.assertIn("Something is broken", result)
-        self.assertIn("DIRECTIVE", result)
-        self.assertIn("10", result)
+        self.assertIn("Safety first", result)
         self.assertNotIn("{task_title}", result)
 
     def test_assess_value(self):
@@ -112,14 +111,9 @@ class TestRender(unittest.TestCase):
         self.assertIn("Optimize loops", result)
 
     def test_missing_key_becomes_empty(self):
-        result = render("plan_task", task_title="Only title provided")
+        result = render("react_execute", task_title="Only title provided")
         self.assertIn("Only title provided", result)
         self.assertNotIn("{task_title}", result)
-
-    def test_json_braces_preserved(self):
-        result = render("plan_task", task_title="Test")
-        self.assertIn('"steps"', result)
-        self.assertIn('"commit_message"', result)
 
 
 class TestDefaultDict(unittest.TestCase):
@@ -135,7 +129,7 @@ class TestDefaultDict(unittest.TestCase):
 class TestReload(unittest.TestCase):
     def test_no_crash(self):
         reload()
-        result = render("plan_task", task_title="After reload")
+        result = render("react_execute", task_title="After reload")
         self.assertIn("After reload", result)
 
 

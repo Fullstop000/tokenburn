@@ -1,24 +1,18 @@
-"""llm247_v2.execution — planning, safe execution, verification, and git flow."""
+"""llm247_v2.execution — ReAct loop, tools, and git workflow."""
 
-from llm247_v2.execution.executor import PlanExecutor, format_execution_log
 from llm247_v2.execution.git_ops import GitOperationError, GitWorkflow
-from llm247_v2.execution.planner import (
-    deserialize_plan,
-    plan_task_with_constitution,
-    serialize_plan,
-)
+from llm247_v2.execution.loop import ReActLoop, format_execution_log, serialize_trace
 from llm247_v2.execution.safety import SafetyPolicy
-from llm247_v2.execution.verifier import format_verification, verify_task
+from llm247_v2.execution.tools import LoopState, ToolRegistry, build_registry
 
 __all__ = [
-    "SafetyPolicy",
-    "deserialize_plan",
-    "plan_task_with_constitution",
-    "serialize_plan",
-    "PlanExecutor",
-    "format_execution_log",
-    "format_verification",
-    "verify_task",
     "GitOperationError",
     "GitWorkflow",
+    "ReActLoop",
+    "format_execution_log",
+    "serialize_trace",
+    "SafetyPolicy",
+    "LoopState",
+    "ToolRegistry",
+    "build_registry",
 ]

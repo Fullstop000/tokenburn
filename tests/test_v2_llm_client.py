@@ -166,11 +166,11 @@ class TestRoutedLLMClient(unittest.TestCase):
                 base_url="https://example.com/v1",
                 model_name="planner-model",
                 api_key="secret-ak",
-            ) if point == ModelBindingPoint.PLANNING.value else None,
+            ) if point == ModelBindingPoint.EXECUTION.value else None,
             client_factory=lambda model: bound_client,
         )
 
-        result = routed.for_point(ModelBindingPoint.PLANNING.value).generate("plan this")
+        result = routed.for_point(ModelBindingPoint.EXECUTION.value).generate("plan this")
 
         self.assertEqual(result, "bound")
         self.assertEqual(bound_client.prompts, ["plan this"])

@@ -20,7 +20,7 @@ def default_directive() -> Directive:
             "lint_check": TaskSourceConfig(enabled=True, priority=2),
         },
         poll_interval_seconds=120,
-        max_replan_rounds=3,
+        max_steps=50,
         max_tokens_per_task=0,
     )
 
@@ -49,7 +49,7 @@ def load_directive(path: Path) -> Directive:
             custom_instructions=str(data.get("custom_instructions", "")),
             task_sources=sources or default_directive().task_sources,
             poll_interval_seconds=int(data.get("poll_interval_seconds", 120)),
-            max_replan_rounds=int(data.get("max_replan_rounds", 3)),
+            max_steps=int(data.get("max_steps", data.get("max_replan_rounds", 50))),
             max_tokens_per_task=int(data.get("max_tokens_per_task", 0)),
         )
     except (json.JSONDecodeError, OSError, ValueError):
@@ -70,7 +70,7 @@ def save_directive(path: Path, directive: Directive) -> None:
         "custom_instructions": directive.custom_instructions,
         "task_sources": sources_raw,
         "poll_interval_seconds": directive.poll_interval_seconds,
-        "max_replan_rounds": directive.max_replan_rounds,
+        "max_steps": directive.max_steps,
         "max_tokens_per_task": directive.max_tokens_per_task,
     }
     tmp = path.with_suffix(".tmp")

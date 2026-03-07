@@ -92,10 +92,10 @@ class TestModelRegistryStore(unittest.TestCase):
             desc="Planner model",
         )
 
-        self.store.set_binding(ModelBindingPoint.PLANNING.value, model.id)
+        self.store.set_binding(ModelBindingPoint.EXECUTION.value, model.id)
         bindings = self.store.list_bindings()
 
-        self.assertEqual(bindings[ModelBindingPoint.PLANNING.value].model_id, model.id)
+        self.assertEqual(bindings[ModelBindingPoint.EXECUTION.value].model_id, model.id)
 
     def test_get_default_model_returns_latest_registered_llm(self):
         first = self.store.register_model(
@@ -127,12 +127,12 @@ class TestModelRegistryStore(unittest.TestCase):
             api_key="secret-ak",
             desc="Planner model",
         )
-        self.store.set_binding(ModelBindingPoint.PLANNING.value, model.id)
+        self.store.set_binding(ModelBindingPoint.EXECUTION.value, model.id)
 
-        self.store.set_binding(ModelBindingPoint.PLANNING.value, "")
+        self.store.set_binding(ModelBindingPoint.EXECUTION.value, "")
         bindings = self.store.list_bindings()
 
-        self.assertNotIn(ModelBindingPoint.PLANNING.value, bindings)
+        self.assertNotIn(ModelBindingPoint.EXECUTION.value, bindings)
 
     def test_update_model_preserves_secret_when_api_key_blank(self):
         model = self.store.register_model(
@@ -166,17 +166,17 @@ class TestModelRegistryStore(unittest.TestCase):
             api_key="secret-ak",
             desc="Planner model",
         )
-        self.store.set_binding(ModelBindingPoint.PLANNING.value, model.id)
+        self.store.set_binding(ModelBindingPoint.EXECUTION.value, model.id)
 
         self.store.delete_model(model.id)
 
         self.assertIsNone(self.store.get_model(model.id))
-        self.assertIsNone(self.store.get_binding(ModelBindingPoint.PLANNING.value))
+        self.assertIsNone(self.store.get_binding(ModelBindingPoint.EXECUTION.value))
 
     def test_binding_specs_cover_current_runtime_points(self):
         binding_points = {spec.binding_point for spec in MODEL_BINDING_SPECS}
 
-        self.assertIn(ModelBindingPoint.PLANNING.value, binding_points)
+        self.assertIn(ModelBindingPoint.EXECUTION.value, binding_points)
         self.assertIn(ModelBindingPoint.TASK_VALUE.value, binding_points)
         self.assertIn(ModelBindingPoint.DISCOVERY_GENERATION.value, binding_points)
         self.assertIn(ModelBindingPoint.INTEREST_DRIVEN_DISCOVERY.value, binding_points)

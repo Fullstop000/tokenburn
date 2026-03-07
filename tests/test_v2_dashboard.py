@@ -198,13 +198,13 @@ class TestDashboardAPI(unittest.TestCase):
             api_key="secret-ak",
             desc="Primary planner model",
         )
-        self.model_store.set_binding(ModelBindingPoint.PLANNING.value, model.id)
+        self.model_store.set_binding(ModelBindingPoint.EXECUTION.value, model.id)
 
         payload = _api_models(self.model_store)
 
         self.assertEqual(len(payload["models"]), 1)
-        self.assertEqual(payload["bindings"][ModelBindingPoint.PLANNING.value]["model_id"], model.id)
-        self.assertTrue(any(item["binding_point"] == ModelBindingPoint.PLANNING.value for item in payload["binding_points"]))
+        self.assertEqual(payload["bindings"][ModelBindingPoint.EXECUTION.value]["model_id"], model.id)
+        self.assertTrue(any(item["binding_point"] == ModelBindingPoint.EXECUTION.value for item in payload["binding_points"]))
 
     def test_models_api_includes_connection_status(self):
         self.model_store.register_model(
@@ -238,11 +238,11 @@ class TestDashboardAPI(unittest.TestCase):
 
         payload = _api_set_model_bindings(
             self.model_store,
-            {"bindings": {ModelBindingPoint.PLANNING.value: model.id}},
+            {"bindings": {ModelBindingPoint.EXECUTION.value: model.id}},
         )
 
         self.assertEqual(payload["status"], "ok")
-        self.assertEqual(payload["bindings"][ModelBindingPoint.PLANNING.value]["model_id"], model.id)
+        self.assertEqual(payload["bindings"][ModelBindingPoint.EXECUTION.value]["model_id"], model.id)
 
     def test_update_model_api_updates_existing_model(self):
         model = self.model_store.register_model(
@@ -280,14 +280,14 @@ class TestDashboardAPI(unittest.TestCase):
             api_key="secret-ak",
             desc="Primary planner model",
         )
-        self.model_store.set_binding(ModelBindingPoint.PLANNING.value, model.id)
+        self.model_store.set_binding(ModelBindingPoint.EXECUTION.value, model.id)
 
         payload = _api_delete_model(self.model_store, model.id)
 
         self.assertEqual(payload["status"], "ok")
         self.assertEqual(payload["model_id"], model.id)
         self.assertIsNone(self.model_store.get_model(model.id))
-        self.assertIsNone(self.model_store.get_binding(ModelBindingPoint.PLANNING.value))
+        self.assertIsNone(self.model_store.get_binding(ModelBindingPoint.EXECUTION.value))
 
 
 class TestPauseResumeAPI(unittest.TestCase):
@@ -336,18 +336,18 @@ class TestTaskDetailAPI(unittest.TestCase):
         self.tmp.cleanup()
 
     def test_task_detail_returns_full_data(self):
-        long_plan = '{"steps": [' + ', '.join(['{"action": "edit"}'] * 50) + ']}'
+        long_trace = '[{"tool": "read_file", "success": true}]' * 20
         long_log = "step result\n" * 200
         self.store.insert_task(Task(
             id="full1", title="Full Detail Task", description="desc",
             source="manual", status="completed", priority=2,
-            plan=long_plan, execution_log=long_log,
+            execution_trace=long_trace, execution_log=long_log,
             token_cost=12345, time_cost_seconds=67.8,
             whats_learned="[pattern] Always validate input\n[pitfall] Don't skip tests",
         ))
         result = _api_task_detail(self.store, "full1")
         t = result["task"]
-        self.assertEqual(t["plan"], long_plan)
+        self.assertEqual(t["execution_trace"], long_trace)
         self.assertEqual(t["execution_log"], long_log)
         self.assertEqual(t["token_cost"], 12345)
         self.assertEqual(t["time_cost_seconds"], 67.8)
@@ -359,32 +359,32 @@ class TestTaskDetailAPI(unittest.TestCase):
         self.assertIn("error", result)
 
     def test_task_row_truncates(self):
-        long_plan = "x" * 2000
+        long_trace = "x" * 2000
         long_log = "y" * 2000
         t = Task(
             id="t1", title="T", description="D", source="s",
             status="queued", priority=2,
-            plan=long_plan, execution_log=long_log,
+            execution_trace=long_trace, execution_log=long_log,
             token_cost=999, time_cost_seconds=12.5,
             whats_learned="z" * 500,
         )
         row = _task_row(t)
-        self.assertEqual(len(row["plan"]), 500)
+        self.assertEqual(len(row["execution_trace"]), 500)
         self.assertEqual(len(row["execution_log"]), 500)
         self.assertEqual(len(row["whats_learned"]), 200)
         self.assertEqual(row["token_cost"], 999)
         self.assertEqual(row["time_cost_seconds"], 12.5)
 
     def test_task_full_no_truncation(self):
-        long_plan = "x" * 2000
+        long_trace = "x" * 2000
         t = Task(
             id="t1", title="T", description="D", source="s",
             status="queued", priority=2,
-            plan=long_plan, token_cost=1000, time_cost_seconds=5.0,
+            execution_trace=long_trace, token_cost=1000, time_cost_seconds=5.0,
             whats_learned="learned stuff",
         )
         full = _task_full(t)
-        self.assertEqual(len(full["plan"]), 2000)
+        self.assertEqual(len(full["execution_trace"]), 2000)
         self.assertEqual(full["token_cost"], 1000)
         self.assertEqual(full["whats_learned"], "learned stuff")
 

@@ -3,12 +3,12 @@ import unittest
 from llm247_v2.core.models import (
     CycleReport,
     Directive,
-    PlanStep,
     Task,
-    TaskPlan,
     TaskSource,
     TaskSourceConfig,
     TaskStatus,
+    ToolCall,
+    ToolResult,
 )
 
 
@@ -60,15 +60,26 @@ class TestDirective(unittest.TestCase):
         self.assertEqual(cfg.priority, 5)
 
 
-class TestTaskPlan(unittest.TestCase):
-    def test_plan_with_steps(self):
-        plan = TaskPlan(
-            task_id="t1",
-            steps=[PlanStep(action="edit_file", target="foo.py", content="x=1")],
-            commit_message="fix: update foo",
-        )
-        self.assertEqual(len(plan.steps), 1)
-        self.assertEqual(plan.steps[0].action, "edit_file")
+class TestToolCall(unittest.TestCase):
+    def test_defaults(self):
+        tc = ToolCall(tool="read_file", arguments={"path": "foo.py"})
+        self.assertEqual(tc.tool, "read_file")
+        self.assertEqual(tc.reasoning, "")
+
+    def test_with_reasoning(self):
+        tc = ToolCall(tool="edit_file", arguments={"path": "a.py", "old_string": "x", "new_string": "y"}, reasoning="fix typo")
+        self.assertEqual(tc.reasoning, "fix typo")
+
+
+class TestToolResult(unittest.TestCase):
+    def test_success(self):
+        tr = ToolResult(tool="read_file", arguments={"path": "foo.py"}, success=True, output="content")
+        self.assertTrue(tr.success)
+        self.assertEqual(tr.output, "content")
+
+    def test_failure(self):
+        tr = ToolResult(tool="edit_file", arguments={}, success=False, output="not found")
+        self.assertFalse(tr.success)
 
 
 class TestCycleReport(unittest.TestCase):

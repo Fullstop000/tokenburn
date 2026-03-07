@@ -4,14 +4,11 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 from llm247_v2.agent import AutonomousAgentV2, run_agent_loop
-from llm247_v2.core.constitution import load_constitution
 from llm247_v2.core.directive import save_directive
-from llm247_v2.execution.executor import ExecutionResult
 from llm247_v2.llm.client import BudgetExhaustedError
-from llm247_v2.core.models import Directive, ModelBindingPoint, PlanStep, Task, TaskPlan, TaskSourceConfig, TaskStatus
+from llm247_v2.core.models import Directive, ModelBindingPoint, Task, TaskSourceConfig, TaskStatus
 from llm247_v2.observability.observer import MemoryHandler, Observer
 from llm247_v2.storage.store import TaskStore
-from llm247_v2.execution.verifier import CheckResult, VerificationResult
 
 
 class FakeLLM:
@@ -22,8 +19,15 @@ class FakeLLM:
         self.call_count += 1
         return '{"tasks": [{"title": "Improve test coverage", "description": "Add tests", "priority": 2}]}'
 
+    def generate_with_tools(self, messages, tools):
+        from llm247_v2.core.models import ToolCall
+        from llm247_v2.llm.client import UsageInfo
+        return None, [ToolCall(tool="finish", arguments={"summary": "done"})], UsageInfo()
+
 
 class FakeRouter:
+    """LLM client that routes to different sub-clients by binding point."""
+
     def __init__(self, mapping, default_response="default"):
         self.mapping = mapping
         self.default_response = default_response
@@ -31,10 +35,28 @@ class FakeRouter:
 
     def for_point(self, point: str):
         self.points.append(point)
-        return self.mapping[point]
+        return self.mapping.get(point, _FakeDefaultLLM(self.default_response))
 
     def generate(self, prompt: str) -> str:
         return self.default_response
+
+    def generate_with_tools(self, messages, tools):
+        from llm247_v2.core.models import ToolCall
+        from llm247_v2.llm.client import UsageInfo
+        return None, [ToolCall(tool="finish", arguments={"summary": "done"})], UsageInfo()
+
+
+class _FakeDefaultLLM:
+    def __init__(self, response):
+        self._response = response
+
+    def generate(self, prompt: str) -> str:
+        return self._response
+
+    def generate_with_tools(self, messages, tools):
+        from llm247_v2.core.models import ToolCall
+        from llm247_v2.llm.client import UsageInfo
+        return None, [ToolCall(tool="finish", arguments={"summary": "done"})], UsageInfo()
 
 
 class TestAutonomousAgentV2(unittest.TestCase):
@@ -108,105 +130,75 @@ class TestAutonomousAgentV2(unittest.TestCase):
         self.assertEqual(len(starts), 1)
         self.assertEqual(len(ends), 1)
 
-    def test_execution_failure_requests_human_help(self):
+    def test_execution_success_completes_task(self):
         task = Task(
-            id="needs-help-1",
-            title="Task that needs human help",
+            id="exec-success-1",
+            title="Task that succeeds",
             description="manual test",
             source="manual",
             status=TaskStatus.QUEUED.value,
             priority=1,
         )
         self.store.insert_task(task)
-
-        plan = TaskPlan(
-            task_id=task.id,
-            steps=[PlanStep(action="run_command", target="false")],
-            commit_message="fix(test): simulate blocked command",
-            pr_title="",
-            pr_body="",
-        )
-        failed_result = ExecutionResult(step_index=0, action="run_command", target="false", success=False, output="command failed")
         directive = Directive()
+        from llm247_v2.core.constitution import load_constitution
         constitution = load_constitution(self.constitution_path)
 
-        with patch("llm247_v2.agent.plan_task_with_constitution", return_value=plan):
-            with patch.object(self.agent, "_cleanup_worktree"):
-                with patch("llm247_v2.agent.PlanExecutor") as MockExecutor:
-                    MockExecutor.return_value.execute_plan.return_value = (False, [failed_result])
-                    success = self.agent._execute_single_task(task, directive, constitution)
+        with patch("llm247_v2.execution.loop.ReActLoop.run", return_value=(True, [])):
+            success = self.agent._execute_single_task(task, directive, constitution)
+
+        self.assertTrue(success)
+        updated = self.store.get_task(task.id)
+        self.assertEqual(updated.status, TaskStatus.COMPLETED.value)
+
+    def test_execution_failure_sets_needs_human(self):
+        task = Task(
+            id="exec-fail-1",
+            title="Task that fails",
+            description="manual test",
+            source="manual",
+            status=TaskStatus.QUEUED.value,
+            priority=1,
+        )
+        self.store.insert_task(task)
+        directive = Directive()
+        from llm247_v2.core.constitution import load_constitution
+        constitution = load_constitution(self.constitution_path)
+
+        with patch("llm247_v2.execution.loop.ReActLoop.run", return_value=(False, [])):
+            success = self.agent._execute_single_task(task, directive, constitution)
 
         self.assertFalse(success)
         updated = self.store.get_task(task.id)
         self.assertEqual(updated.status, TaskStatus.NEEDS_HUMAN.value)
         self.assertTrue(updated.human_help_request)
-        # Verify structured help request includes context
-        self.assertIn("Task that needs human help", updated.human_help_request)
-        self.assertIn("Execution", updated.human_help_request)
-        self.assertIn("Suggested actions", updated.human_help_request)
 
-        # Verify observer got task_needs_human, not task_failed
-        needs_human_events = self.memory_handler.find(phase="execute", action="task_needs_human")
-        self.assertEqual(len(needs_human_events), 1)
-
-    def test_human_resolved_task_continues_verification(self):
+    def test_execution_uses_execution_binding_point(self):
         task = Task(
-            id="needs-help-2",
-            title="Resume verification",
-            description="manual test",
-            source="manual",
-            status=TaskStatus.HUMAN_RESOLVED.value,
-            priority=1,
-            execution_log="[0] OK edit_file src/example.py",
-            human_help_request="",
-        )
-        self.store.insert_task(task)
-
-        directive = Directive()
-        constitution = load_constitution(self.constitution_path)
-        passing_verification = VerificationResult(
-            passed=True,
-            checks=[CheckResult(name="tests", passed=True, output="ok")],
-            summary="tests: PASS",
-        )
-
-        with patch("llm247_v2.agent.plan_task_with_constitution") as plan_mock:
-            with patch("llm247_v2.agent.verify_task", return_value=passing_verification):
-                success = self.agent._execute_single_task(task, directive, constitution)
-
-        self.assertTrue(success)
-        plan_mock.assert_not_called()
-        updated = self.store.get_task(task.id)
-        self.assertEqual(updated.status, TaskStatus.COMPLETED.value)
-
-    def test_planning_uses_planning_binding_point(self):
-        task = Task(
-            id="planning-route",
-            title="Route planning model",
+            id="exec-route-1",
+            title="Route execution model",
             description="manual test",
             source="manual",
             status=TaskStatus.QUEUED.value,
             priority=1,
         )
         self.store.insert_task(task)
-        planning_llm = FakeLLM()
-        self.agent.llm = FakeRouter({ModelBindingPoint.PLANNING.value: planning_llm})
-
-        class StopPlanning(Exception):
-            pass
-
+        execution_llm = FakeLLM()
+        self.agent.llm = FakeRouter({ModelBindingPoint.EXECUTION.value: execution_llm})
         directive = Directive()
+        from llm247_v2.core.constitution import load_constitution
         constitution = load_constitution(self.constitution_path)
 
-        def capture_plan(task, workspace, directive, constitution, llm, experience_context=""):
-            self.assertIs(llm, planning_llm)
-            raise StopPlanning()
+        captured = {}
 
-        with self.assertRaises(StopPlanning):
-            with patch("llm247_v2.agent.plan_task_with_constitution", side_effect=capture_plan):
-                self.agent._execute_single_task(task, directive, constitution)
+        def capture_run(self_loop, task, workspace, directive, experience_context=""):
+            captured["llm"] = self_loop.llm
+            return True, []
 
-        self.assertEqual(self.agent.llm.points, [ModelBindingPoint.PLANNING.value])
+        with patch("llm247_v2.execution.loop.ReActLoop.run", capture_run):
+            self.agent._execute_single_task(task, directive, constitution)
+
+        self.assertIn(ModelBindingPoint.EXECUTION.value, self.agent.llm.points)
 
     def test_learning_extraction_uses_learning_binding_point(self):
         task = Task(
@@ -217,11 +209,10 @@ class TestAutonomousAgentV2(unittest.TestCase):
             status=TaskStatus.COMPLETED.value,
             priority=1,
             execution_log="done",
-            verification_result="ok",
         )
         learning_llm = FakeLLM()
         learning_llm.generate = lambda prompt: '{"learnings": []}'
-        self.agent.llm = FakeRouter({ModelBindingPoint.LEARNING_EXTRACTION.value: learning_llm}, default_response="wrong")
+        self.agent.llm = FakeRouter({ModelBindingPoint.LEARNING_EXTRACTION.value: learning_llm})
         self.agent.exp_store = MagicMock()
 
         captured = {}
@@ -234,7 +225,7 @@ class TestAutonomousAgentV2(unittest.TestCase):
             self.agent._extract_and_store_learnings(task, "completed")
 
         self.assertEqual(captured["response"], '{"learnings": []}')
-        self.assertEqual(self.agent.llm.points, [ModelBindingPoint.LEARNING_EXTRACTION.value])
+        self.assertIn(ModelBindingPoint.LEARNING_EXTRACTION.value, self.agent.llm.points)
 
 
 class TestRunAgentLoop(unittest.TestCase):

@@ -10,23 +10,23 @@ from llm247_v2.core.directive import (
 from llm247_v2.core.models import (
     CycleReport,
     Directive,
-    PlanStep,
     Task,
-    TaskPlan,
     TaskSource,
     TaskSourceConfig,
     TaskStatus,
+    ToolCall,
+    ToolResult,
 )
 
 __all__ = [
     "CycleReport",
     "Directive",
-    "PlanStep",
     "Task",
-    "TaskPlan",
     "TaskSource",
     "TaskSourceConfig",
     "TaskStatus",
+    "ToolCall",
+    "ToolResult",
     "Constitution",
     "load_constitution",
     "default_directive",

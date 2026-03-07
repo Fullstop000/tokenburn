@@ -41,7 +41,7 @@ class ModelType(str, Enum):
 class ModelBindingPoint(str, Enum):
     """Named runtime call sites that can be bound to registered models."""
 
-    PLANNING = "planning"
+    EXECUTION = "execution"
     TASK_VALUE = "task_value"
     DISCOVERY_GENERATION = "discovery_generation"
     INTEREST_DRIVEN_DISCOVERY = "interest_driven_discovery"
@@ -64,28 +64,15 @@ class Task:
     updated_at: str = ""
     branch_name: str = ""
     pr_url: str = ""
-    plan: str = ""
+    execution_trace: str = ""
     execution_log: str = ""
-    verification_result: str = ""
     error_message: str = ""
     cycle_id: int = 0
     token_cost: int = 0
     time_cost_seconds: float = 0.0
     whats_learned: str = ""
     human_help_request: str = ""
-    replan_history: str = ""
 
-
-@dataclass
-class ExecutionRound:
-    """One round of the plan-execute-verify loop, stored for observability."""
-
-    round_number: int
-    plan_steps: List[Dict[str, str]]
-    results: List[Dict[str, str]]
-    verification: str
-    trigger: str  # "step_failure" | "verification_failure"
-    token_cost: int = 0
 
 
 @dataclass
@@ -123,20 +110,18 @@ class ModelBindingSpec:
 
 
 @dataclass
-class PlanStep:
-    action: str
-    target: str
-    content: str = ""
-    description: str = ""
+class ToolCall:
+    tool: str
+    arguments: dict
+    reasoning: str = ""
 
 
 @dataclass
-class TaskPlan:
-    task_id: str
-    steps: List[PlanStep] = field(default_factory=list)
-    commit_message: str = ""
-    pr_title: str = ""
-    pr_body: str = ""
+class ToolResult:
+    tool: str
+    arguments: dict
+    success: bool
+    output: str
 
 
 @dataclass
@@ -167,5 +152,5 @@ class Directive:
     custom_instructions: str = ""
     task_sources: Dict[str, TaskSourceConfig] = field(default_factory=dict)
     poll_interval_seconds: int = 120
-    max_replan_rounds: int = 3
+    max_steps: int = 50
     max_tokens_per_task: int = 0

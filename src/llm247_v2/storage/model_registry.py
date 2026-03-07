@@ -46,9 +46,9 @@ _MIGRATIONS = [
 
 MODEL_BINDING_SPECS = (
     ModelBindingSpec(
-        binding_point=ModelBindingPoint.PLANNING.value,
-        label="Planning",
-        description="Execution plan generation for one queued task.",
+        binding_point=ModelBindingPoint.EXECUTION.value,
+        label="Execution",
+        description="ReAct tool-calling loop for autonomous task execution.",
         model_type=ModelType.LLM.value,
     ),
     ModelBindingSpec(

@@ -20,9 +20,8 @@ CREATE TABLE IF NOT EXISTS tasks (
     updated_at TEXT NOT NULL,
     branch_name TEXT DEFAULT '',
     pr_url TEXT DEFAULT '',
-    plan TEXT DEFAULT '',
+    execution_trace TEXT DEFAULT '',
     execution_log TEXT DEFAULT '',
-    verification_result TEXT DEFAULT '',
     error_message TEXT DEFAULT '',
     cycle_id INTEGER DEFAULT 0,
     token_cost INTEGER DEFAULT 0,
@@ -62,7 +61,9 @@ _MIGRATIONS = [
     "ALTER TABLE tasks ADD COLUMN time_cost_seconds REAL DEFAULT 0.0",
     "ALTER TABLE tasks ADD COLUMN whats_learned TEXT DEFAULT ''",
     "ALTER TABLE tasks ADD COLUMN human_help_request TEXT DEFAULT ''",
+    # Legacy columns kept for backward compat with existing databases
     "ALTER TABLE tasks ADD COLUMN replan_history TEXT DEFAULT ''",
+    "ALTER TABLE tasks ADD COLUMN execution_trace TEXT DEFAULT ''",
 ]
 
 
@@ -83,16 +84,14 @@ def _row_to_task(row: sqlite3.Row) -> Task:
         updated_at=d["updated_at"],
         branch_name=d["branch_name"],
         pr_url=d["pr_url"],
-        plan=d["plan"],
+        execution_trace=d.get("execution_trace", "") or "",
         execution_log=d["execution_log"],
-        verification_result=d["verification_result"],
         error_message=d["error_message"],
         cycle_id=d["cycle_id"],
         token_cost=d.get("token_cost", 0) or 0,
         time_cost_seconds=d.get("time_cost_seconds", 0.0) or 0.0,
         whats_learned=d.get("whats_learned", "") or "",
         human_help_request=d.get("human_help_request", "") or "",
-        replan_history=d.get("replan_history", "") or "",
     )
 
 
@@ -124,20 +123,18 @@ class TaskStore:
             self._conn.execute(
                 """INSERT OR IGNORE INTO tasks
                    (id, title, description, source, status, priority,
-                    created_at, updated_at, branch_name, pr_url, plan,
-                    execution_log, verification_result, error_message, cycle_id,
-                    token_cost, time_cost_seconds, whats_learned, human_help_request,
-                    replan_history)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    created_at, updated_at, branch_name, pr_url, execution_trace,
+                    execution_log, error_message, cycle_id,
+                    token_cost, time_cost_seconds, whats_learned, human_help_request)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (
                     task.id, task.title, task.description, task.source,
                     task.status, task.priority,
                     task.created_at or now, task.updated_at or now,
-                    task.branch_name, task.pr_url, task.plan,
-                    task.execution_log, task.verification_result,
-                    task.error_message, task.cycle_id,
+                    task.branch_name, task.pr_url, task.execution_trace,
+                    task.execution_log, task.error_message, task.cycle_id,
                     task.token_cost, task.time_cost_seconds, task.whats_learned,
-                    task.human_help_request, task.replan_history,
+                    task.human_help_request,
                 ),
             )
             self._conn.commit()
@@ -148,19 +145,17 @@ class TaskStore:
             self._conn.execute(
                 """UPDATE tasks SET
                    title=?, description=?, source=?, status=?, priority=?,
-                   updated_at=?, branch_name=?, pr_url=?, plan=?,
-                   execution_log=?, verification_result=?, error_message=?, cycle_id=?,
-                   token_cost=?, time_cost_seconds=?, whats_learned=?, human_help_request=?,
-                   replan_history=?
+                   updated_at=?, branch_name=?, pr_url=?, execution_trace=?,
+                   execution_log=?, error_message=?, cycle_id=?,
+                   token_cost=?, time_cost_seconds=?, whats_learned=?, human_help_request=?
                    WHERE id=?""",
                 (
                     task.title, task.description, task.source, task.status,
                     task.priority, now, task.branch_name, task.pr_url,
-                    task.plan, task.execution_log, task.verification_result,
+                    task.execution_trace, task.execution_log,
                     task.error_message, task.cycle_id,
                     task.token_cost, task.time_cost_seconds, task.whats_learned,
-                    task.human_help_request, task.replan_history,
-                    task.id,
+                    task.human_help_request, task.id,
                 ),
             )
             self._conn.commit()
