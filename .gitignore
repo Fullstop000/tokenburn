@@ -1,6 +1,7 @@
 # Runtime outputs
 .llm247/
 .llm247_v2/
+.worktree
 .worktrees/
 reports/
 .env

@@ -1,75 +1,104 @@
 # Sprout
 
-A seed that grows into compounding engineering intelligence.
+Sprout is an autonomous, self-evolving intelligence that builds deep understanding of its world, pursues goals across time, communicates with humans as partners, and deliberately improves its own capabilities.
 
-Sprout is an autonomous engineering agent that runs 24/7 — discovering what interests it in a codebase, building and verifying solutions, learning from every outcome, and evolving through experience. It starts as a simple task executor, but with every cycle it gets smarter: remembering past mistakes, forming deeper understanding of the systems it works on, and deliberately improving its own capabilities.
+It is not just an automation runtime. Sprout is designed to operate continuously, produce reviewable artifacts, learn from outcomes, and improve its own implementation through the same controlled workflow it uses for any other code change.
 
-The agent on day 1 and the agent on day 90 are fundamentally different. The second one is better — and it made itself that way.
+## Core Properties
 
-The repository now ships a single supported runtime: `src/llm247_v2/`.
+- **Autonomous multi-modal operation**: chooses the highest-value work each cycle and turns tokens into concrete artifacts
+- **Learning through experience**: stores lessons from success and failure and retrieves them when relevant
+- **Self-modification**: improves its own code through normal commit, push, and pull request workflows
+- **Human-friendly observability**: exposes logs, audit trails, task history, and dashboard controls
+- **Reviewable and controllable behavior**: humans can inspect, pause, redirect, constrain, or stop the runtime
 
-## What Sprout Does
+## Current Runtime
 
-|                      |                                                                                                                                                            |
-| -------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Discovers**        | Scans for TODOs, test gaps, lint issues, dependency vulnerabilities, GitHub issues — and follows its own curiosity into unexplored corners of the codebase |
-| **Plans & Executes** | LLM-driven planning with constitution-governed safety. All changes in isolated git worktrees.                                                              |
-| **Ships**            | Commits, pushes, and creates GitHub PRs automatically. Every change is reviewable.                                                                         |
-| **Learns**           | Extracts lessons from every task (success or failure), stores them persistently, and recalls relevant experience when planning future work                 |
-| **Communicates**     | Dashboard control plane for real-time visibility. Help center for human-agent collaboration when the agent gets stuck.                                     |
-| **Evolves**          | Improves its own source code through the same PR workflow it uses for everything else                                                                      |
+The only supported runtime lives in `src/llm247_v2/`.
+
+Runtime state is stored under `.llm247_v2/`, including task history, experience storage, model registry, directive state, logs, and LLM audit records.
 
 ## Architecture
 
-See [docs/design/](docs/design/) for full design documentation:
+Sprout is organized around seven subsystem boundaries:
 
-- [evolution.md](docs/design/evolution.md) — Architecture roadmap: five cognitive layers
-- [architecture.md](docs/design/architecture.md) — Module map, agent cycle, memory stack
-- [core.md](docs/design/core.md) — Data models, constitution, directive
-- [experience.md](docs/design/experience.md) — Long-term memory and learning
-- [discovery.md](docs/design/discovery.md) — Task discovery strategies
-- [execution.md](docs/design/execution.md) — Planning, execution, verification
-- [llm.md](docs/design/llm.md) — LLM client and prompt management
-- [storage.md](docs/design/storage.md) — SQLite persistence
-- [observability.md](docs/design/observability.md) — Event system and audit trail
-- [dashboard.md](docs/design/dashboard.md) — HTTP control plane and API
+- **Core**: shared models, directive, constitution, immutable rules
+- **LLM**: model communication and prompt rendering
+- **Storage**: SQLite-backed persistence
+- **Observability**: event emission, logs, audit trail
+- **Discovery**: task candidate generation and ranking
+- **Execution**: planning, worktree execution, verification, git operations
+- **Dashboard**: HTTP control plane and frontend
 
-## 快速启动
+The agent cycle is:
 
-### 环境要求
+1. Load directive and constitution
+2. Discover candidate work
+3. Execute the highest-value task
+4. Verify and ship reviewable changes
+5. Store learnings
+6. Emit audit and observability events
+
+## Documentation
+
+Authoritative project documentation lives under [`docs/design/`](docs/design/):
+
+- [`docs/design/project.md`](docs/design/project.md): mission, pillars, repository conventions
+- [`docs/design/architecture.md`](docs/design/architecture.md): subsystem map, cycle, memory stack
+- [`docs/design/core.md`](docs/design/core.md): data models, directive, constitution, model bindings
+- [`docs/design/execution.md`](docs/design/execution.md): planning, execution, verification, safety, git workflow
+- [`docs/design/observability.md`](docs/design/observability.md): audit trail, logs, human review protocol
+- [`docs/design/evolution.md`](docs/design/evolution.md): long-range architecture roadmap
+
+Project process and documentation rules are defined in [`AGENTS.md`](AGENTS.md).
+
+## Quick Start
+
+### Requirements
 
 - Python 3.10+
-- Node.js 18+（Dashboard UI 构建）
-- `openai` SDK (`pip install -r requirements.txt`)
-- `gh` CLI (可选，用于创建 PR)
+- Node.js 18+ for the dashboard frontend
+- Python dependencies from `requirements.txt`
+- `gh` CLI if you want automated pull request creation
 
-### 配置
+### Setup
 
 ```bash
 cp .env.example .env
-# 可选：编辑 .env，设置 WORKSPACE_PATH / POLL_INTERVAL_SECONDS 等运行参数
-# 模型配置改为在 Dashboard 的 Models 页面注册和绑定
-# LLM 填 base URL；embedding 填完整 API path（例如 /api/v3/embeddings/multimodal）
 ```
 
-### 运行
+Model registrations and runtime bindings are managed through the Dashboard and stored in `.llm247_v2/models.db`.
+
+### Run
 
 ```bash
-# 启动 24/7 agent 循环
 ./scripts/start_v2.sh agent
+```
 
-# 如果还没注册默认 LLM，进程会自动进入 setup mode，
-# 启动 dashboard 并等待你在 Models 页面完成初始化
+Useful variants:
 
-# 仅启动 Dashboard UI
+```bash
 ./scripts/start_v2.sh ui
-
-# Agent + Dashboard 同时运行
 ./scripts/start_v2.sh both
-
-# 运行单次循环（调试用）
 ./scripts/start_v2.sh once
-
-# 运行测试
 ./scripts/start_v2.sh test
 ```
+
+For maintained runtime tests, the repository convention is:
+
+```bash
+PYTHONPATH=src python3 -m unittest discover -s tests -p "test_v2_*.py" -v
+```
+
+## Human Review
+
+Useful review entry points:
+
+- `tail -f .llm247_v2/activity.log`
+- Dashboard task views and control surface
+- `.llm247_v2/activity.jsonl`
+- `.llm247_v2/llm_audit.jsonl`
+
+## License
+
+This project is licensed under the Apache License 2.0. See [LICENSE](LICENSE).
