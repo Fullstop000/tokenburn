@@ -1,63 +1,39 @@
 # V2 Architecture Overview
 
-> Last updated: 2026-03-05
+> Last updated: 2026-03-07
 
-## Module Map
+## Subsystems
+
+Seven subsystems, each with a single responsibility:
+
+| Subsystem | Responsibility | Key Abstractions |
+|-----------|---------------|-----------------|
+| **Core** | Shared data models and immutable rules | `Task`, `TaskPlan`, `Directive`, `Constitution` |
+| **LLM** | Language model communication and prompt management | `LLMClient`, prompt templates, `TokenTracker` |
+| **Storage** | SQLite persistence across all time horizons | `TaskStore`, `ExperienceStore`, `ModelRegistry` |
+| **Observability** | Unified event emission to all sinks | `Observer` |
+| **Discovery** | Task candidate generation and ranking | `DiscoveryPipeline`, `ExplorationMap`, `InterestProfile` |
+| **Execution** | Plan, execute, verify, and ship changes | `Planner`, `Executor`, `Verifier`, `GitOps` |
+| **Dashboard** | HTTP control plane and frontend | REST API, web UI |
+
+## Dependency Flow
 
 ```
-src/llm247_v2/
-├── __init__.py              # Package summary and layout docs
-├── __main__.py              # CLI entry point (imports from submodules)
-├── agent.py                 # Main orchestrator: the cycle loop
-│
-├── core/                    # Shared base layer
-│   ├── __init__.py
-│   ├── models.py            # Core data models (Task, Directive, TaskPlan, CycleReport)
-│   ├── constitution.py      # Immutable principles — the agent's DNA
-│   └── directive.py         # Runtime behavior control (paused, focus, forbidden paths)
-│
-├── llm/                     # LLM client + prompt templates
-│   ├── __init__.py
-│   ├── client.py            # LLM protocol + Ark adapter + TokenTracker + AuditLogger
-│   └── prompts/
-│       ├── __init__.py      # Template loader + renderer
-│       ├── plan_task.txt
-│       ├── assess_value.txt
-│       ├── extract_learnings.txt
-│       ├── discover_stale_area.txt
-│       ├── discover_deep_review.txt
-│       ├── discover_llm_guided.txt
-│       └── discover_web_search.txt
-│
-├── storage/                 # SQLite persistence
-│   ├── __init__.py
-│   ├── store.py             # Tasks/events/cycles
-│   └── experience.py        # Long-term memory and learning extraction
-│   └── model_registry.py    # Registered models + runtime binding points
-│
-├── observability/           # Event observation layer
-│   ├── __init__.py
-│   └── observer.py          # Centralized event system (log, JSONL, SQLite, console)
-│
-├── discovery/               # Task discovery pipeline
-│   ├── __init__.py
-│   ├── pipeline.py          # Strategy orchestration and candidate ranking
-│   ├── exploration.py       # ExplorationMap — tracks visited areas
-│   ├── value.py             # Value assessment — heuristic + LLM scoring
-│   └── interest.py          # Interest profile + issue discovery sources
-│
-├── execution/               # Planning and execution pipeline
-│   ├── __init__.py
-│   ├── planner.py           # LLM-driven execution plan generation
-│   ├── executor.py          # Safe action execution (edit, create, run, delete)
-│   ├── verifier.py          # Post-execution verification (syntax, tests, secrets)
-│   ├── git_ops.py           # Git workflow (worktree isolation, branch, commit, push, PR)
-│   └── safety.py            # Command allowlist + path protection
-│
-└── dashboard/               # HTTP control plane
-    ├── __init__.py
-    └── server.py            # Dashboard server and API
+[ Dashboard ]   [ CLI ]
+       ↓            ↓
+    [ Agent — cycle orchestrator ]
+           ↙               ↘
+   [ Discovery ]       [ Execution ]
+           ↘               ↙
+    [ Core / LLM / Storage / Observability ]
+            (shared foundation)
 ```
+
+Rules:
+- Discovery and Execution are independent — neither depends on the other.
+- Both depend downward on Core, LLM, Storage, and Observability.
+- The Agent orchestrates them; it does not implement their logic.
+- Dashboard and CLI are driving adapters — they only call into Agent.
 
 ## The Cycle
 

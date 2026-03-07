@@ -12,7 +12,7 @@ The defining property: **the agent on day 90 is fundamentally better than the ag
 
 ## Current State Assessment
 
-V2 has a solid action layer. It can discover tasks, plan solutions, execute them safely in isolated worktrees, verify results, and ship PRs — all autonomously, 24/7. The Five Pillars defined in AGENTS.md are architecturally sound.
+V2 has a solid action layer. It can discover tasks, plan solutions, execute them safely in isolated worktrees, verify results, and ship PRs — all autonomously, 24/7. The Five Pillars defined in [project.md](project.md) are architecturally sound.
 
 But V2 is a **worker**, not a **thinker**. It finds a task, does the task, extracts a lesson, moves on. It has no concept of long-term goals, no unified understanding of the codebase it works on, no ability to initiate a conversation with a human, and no mechanism to identify and fix its own weaknesses.
 
