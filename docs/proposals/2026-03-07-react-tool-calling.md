@@ -1,10 +1,10 @@
 # Proposal: Replace Plan-then-Execute with a ReAct Tool-Calling Loop
 
-> Status: Approved for Plan
+> Status: Superseded
 > Created: 2026-03-07
 > Decision: Approved — replace Plan-then-Execute + replan with ReAct tool-calling loop
 > Scope: `execution/` subsystem only — discovery, git workflow, experience, and observability are unaffected
-> Next Step: Decide whether to prototype; if yes, write an implementation plan for `execution/`
+> Next Step: Implemented — see PR #12 and docs/archive/2026-03-07-react-tool-calling.md
 > Related: [../design/execution.md](../design/execution.md), [../design/architecture.md](../design/architecture.md)
 
 ## Summary
