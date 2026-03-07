@@ -146,6 +146,9 @@ def main() -> int:
 
     exp_store = ExperienceStore(state_dir / "experience.db")
 
+    from llm247_v2.storage.thread_store import ThreadStore
+    thread_store = ThreadStore(state_dir / "threads.db")
+
     if args.with_ui or bootstrap["requires_setup"]:
         ui_thread = threading.Thread(
             target=serve_dashboard,
@@ -208,9 +211,6 @@ def main() -> int:
     )
     observer = create_default_observer(state_dir, store=store, console=True)
     shutdown_event = threading.Event()
-
-    from llm247_v2.storage.thread_store import ThreadStore
-    thread_store = ThreadStore(state_dir / "threads.db")
 
     agent = AutonomousAgentV2(
         workspace=workspace,
