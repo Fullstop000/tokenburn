@@ -110,9 +110,12 @@ Ideas that are not yet approved for implementation must live here.
 - `## Risks and Open Questions` — unresolved issues that block planning
 - `## Exit Criteria` — what must be true before this becomes a plan, is rejected, or is superseded
 
-**Statuses:** `Draft` → `Review Needed` → `Approved for Plan` | `Rejected` | `Superseded`
+**Statuses:** `Draft` → `Review Needed` → `Approved for Plan` → `Superseded` | `Rejected`
 
-**Index:** `docs/proposals/README.md` lists all active proposals, ordered by status then newest first.
+- `Superseded` — the linked plan reached `Completed` or `Abandoned`; update when moving the plan to archive
+- `Rejected` — explicitly decided against; leave in proposals/ with a decision note
+
+**Index:** `docs/proposals/README.md` lists all active proposals (any status except `Superseded`/`Rejected`), ordered by status then newest first.
 
 ---
 
@@ -122,10 +125,37 @@ Significant changes to existing modules or new subsystems must have a plan here 
 
 `docs/plans/` is a **work queue** — every file represents approved work still to be done. Do not put pre-decision ideas here. Do not leave completed plans here.
 
+**Required metadata fields:**
+
+```
+> Status: Approved | In Progress | Completed | Abandoned
+> Created: YYYY-MM-DD
+> Completed: YYYY-MM-DD        ← fill when PR merges
+> PR: <url>                    ← fill when PR is opened
+> Proposal: <path>
+```
+
+**Plan status machine — driven by PR lifecycle:**
+
+| Transition | Trigger | Required action |
+|------------|---------|-----------------|
+| `Approved` → `In Progress` | PR opened | Add `PR: <url>` to plan metadata; update Status |
+| `In Progress` → `Completed` | PR merged | Add `Completed: <date>`; move file to `docs/archive/`; update linked proposal to `Superseded` |
+| `In Progress` → `Abandoned` | PR closed without merge | Add `Completed: <date>` and `Abandoned Reason:`; move to `docs/archive/`; update proposal accordingly |
+
+**Bidirectional reference rule:** every PR that implements a plan must include in its body:
+
+```
+Implements: docs/plans/<slug>.md
+Proposal: docs/proposals/<slug>.md
+```
+
+This creates a traceable chain: **Proposal ↔ Plan ↔ PR**.
+
 ---
 
 ## Plan Archive (`docs/archive/`)
 
-When a plan is fully implemented and verified, move it from `docs/plans/` to `docs/archive/` unchanged. Do not edit the content — move it as-is.
+When a plan reaches `Completed` or `Abandoned`, move it from `docs/plans/` to `docs/archive/` with its metadata updated. Do not alter any other content.
 
-`docs/archive/` preserves the historical record. Design docs stay in `docs/design/` regardless of their completion status — only plans move to archive.
+`docs/archive/` is a read-only historical record. Design docs stay in `docs/design/` regardless of completion status — only plans move to archive.
