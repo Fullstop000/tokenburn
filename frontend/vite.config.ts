@@ -1,5 +1,6 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
+import path from 'path'
 
 /**
  * Build config for dashboard frontend.
@@ -14,6 +15,11 @@ import react from '@vitejs/plugin-react'
  */
 export default defineConfig(({ command }) => ({
   plugins: [react()],
+  resolve: {
+    alias: {
+      '@': path.resolve(__dirname, './src'),
+    },
+  },
   build: {
     outDir: 'dist',
     assetsDir: 'assets',

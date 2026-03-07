@@ -1,5 +1,89 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
 
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
 :root {
   color-scheme: dark;
+  --radius: 0.5rem;
+  
+  /* Dark theme (default) */
+  --background: 222 47% 6%;
+  --foreground: 213 27% 84%;
+  --card: 222 35% 10%;
+  --card-foreground: 213 27% 84%;
+  --popover: 222 35% 10%;
+  --popover-foreground: 213 27% 84%;
+  --primary: 217 91% 60%;
+  --primary-foreground: 222 47% 6%;
+  --secondary: 222 25% 18%;
+  --secondary-foreground: 213 27% 84%;
+  --muted: 222 25% 18%;
+  --muted-foreground: 215 16% 57%;
+  --accent: 222 25% 18%;
+  --accent-foreground: 213 27% 84%;
+  --destructive: 0 84% 60%;
+  --destructive-foreground: 213 27% 84%;
+  --border: 215 16% 30%;
+  --input: 215 16% 20%;
+  --ring: 217 91% 60%;
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+    font-feature-settings: "rlig" 1, "calt" 1;
+  }
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: hsl(var(--muted-foreground) / 0.3);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: hsl(var(--muted-foreground) / 0.5);
+}
+
+/* Timeline styles */
+.timeline-item {
+  position: relative;
+  padding-left: 1rem;
+  border-left: 2px solid hsl(var(--border));
+}
+
+.timeline-item::before {
+  content: '';
+  position: absolute;
+  left: -5px;
+  top: 0.5rem;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: hsl(var(--muted-foreground));
+  border: 2px solid hsl(var(--background));
+}
+
+/* Animation */
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+
+.animate-pulse-dot {
+  animation: pulse-dot 2s ease-in-out infinite;
 }
