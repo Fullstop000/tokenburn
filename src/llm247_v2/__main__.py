@@ -115,8 +115,10 @@ def main() -> int:
     if args.ui:
         from llm247_v2.dashboard.server import serve_dashboard
         from llm247_v2.storage.experience import ExperienceStore
+        from llm247_v2.storage.thread_store import ThreadStore as _ThreadStore
 
         exp_store = ExperienceStore(state_dir / "experience.db")
+        ui_thread_store = _ThreadStore(state_dir / "threads.db")
         try:
             serve_dashboard(
                 store,
@@ -127,10 +129,12 @@ def main() -> int:
                 experience_store=exp_store,
                 model_store=model_store,
                 bootstrap_status_provider=lambda: _bootstrap_status(model_store),
+                thread_store=ui_thread_store,
             )
             return 0
         finally:
             exp_store.close()
+            ui_thread_store.close()
             model_store.close()
             store.close()
 
@@ -151,6 +155,7 @@ def main() -> int:
                 "experience_store": exp_store,
                 "model_store": model_store,
                 "bootstrap_status_provider": lambda: _bootstrap_status(model_store),
+                "thread_store": thread_store,
             },
             daemon=True,
         )
@@ -204,25 +209,8 @@ def main() -> int:
     observer = create_default_observer(state_dir, store=store, console=True)
     shutdown_event = threading.Event()
 
-    # Optional GitHub integration
-    github_client = None
-    thread_store = None
-    github_token = os.getenv("GITHUB_TOKEN")
-    github_owner = os.getenv("GITHUB_OWNER")
-    github_repo = os.getenv("GITHUB_REPO")
-    if github_token and github_owner and github_repo:
-        from llm247_v2.github.client import GitHubClient
-        from llm247_v2.storage.thread_store import ThreadStore
-        github_label = os.getenv("GITHUB_LABEL", "sprout")
-        github_assignees = [
-            a.strip() for a in os.getenv("GITHUB_ASSIGNEES", "").split(",") if a.strip()
-        ]
-        github_client = GitHubClient(
-            token=github_token, owner=github_owner, repo=github_repo,
-            label=github_label, assignees=github_assignees,
-        )
-        thread_store = ThreadStore(state_dir / "threads.db")
-        logger.info("GitHub integration enabled: %s/%s label=%s", github_owner, github_repo, github_label)
+    from llm247_v2.storage.thread_store import ThreadStore
+    thread_store = ThreadStore(state_dir / "threads.db")
 
     agent = AutonomousAgentV2(
         workspace=workspace,
@@ -236,9 +224,7 @@ def main() -> int:
         branch_prefix=args.branch_prefix,
         interest_profile_path=interest_profile_path,
         shutdown_event=shutdown_event,
-        github_client=github_client,
         thread_store=thread_store,
-        dashboard_url=os.getenv("DASHBOARD_URL", ""),
     )
 
     def _handle_signal(signum: int, _frame) -> None:
@@ -294,6 +280,7 @@ def main() -> int:
         observer.close()
         exp_store.close()
         audit_logger.close()
+        thread_store.close()
         model_store.close()
         store.close()
 

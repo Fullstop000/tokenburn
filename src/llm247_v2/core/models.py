@@ -72,7 +72,6 @@ class Task:
     time_cost_seconds: float = 0.0
     whats_learned: str = ""
     human_help_request: str = ""
-    github_issue_url: str = ""
 
 
 

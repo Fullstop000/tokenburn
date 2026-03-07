@@ -90,6 +90,12 @@ def serve_dashboard(
             elif path.startswith("/api/tasks/"):
                 task_id = path.split("/api/tasks/")[1].split("?")[0]
                 self._serve_json(_api_task_detail(store, task_id, thread_store=thread_store))
+            elif path == "/api/threads":
+                status_filter = qs.get("status", [""])[0]
+                self._serve_json(_api_threads(thread_store, status=status_filter or None))
+            elif path.startswith("/api/threads/"):
+                thread_id = path.split("/api/threads/")[1].split("?")[0]
+                self._serve_json(_api_thread_detail(thread_store, thread_id))
             elif path == "/api/cycles":
                 self._serve_json(_api_cycles(store))
             elif path == "/api/stats":
@@ -151,6 +157,13 @@ def serve_dashboard(
             elif self.path == "/api/help-center/resolve":
                 body = self._read_body()
                 self._serve_json(_api_resolve_help_request(store, body))
+            elif self.path.startswith("/api/threads/") and self.path.endswith("/reply"):
+                thread_id = self.path.split("/api/threads/")[1].split("/reply")[0]
+                body = self._read_body()
+                self._serve_json(_api_thread_reply(thread_store, store, thread_id, body))
+            elif self.path == "/api/threads":
+                body = self._read_body()
+                self._serve_json(_api_create_thread(thread_store, store, body))
             else:
                 self.send_error(HTTPStatus.NOT_FOUND)
 
@@ -651,7 +664,6 @@ def _task_row(t) -> Dict:
         "time_cost_seconds": t.time_cost_seconds,
         "whats_learned": t.whats_learned[:200] if t.whats_learned else "",
         "human_help_request": t.human_help_request[:500] if t.human_help_request else "",
-        "github_issue_url": t.github_issue_url,
     }
 
 
@@ -670,7 +682,6 @@ def _task_full(t) -> Dict:
         "whats_learned": t.whats_learned,
         "human_help_request": t.human_help_request,
         "cycle_id": t.cycle_id,
-        "github_issue_url": t.github_issue_url,
     }
 
 
@@ -714,6 +725,87 @@ def _mask_api_key(api_key: str) -> str:
     if len(clean) <= 4:
         return "*" * len(clean)
     return f"{clean[:2]}***{clean[-2:]}"
+
+
+def _thread_row(thread) -> Dict:
+    return {
+        "id": thread.id,
+        "title": thread.title,
+        "status": thread.status,
+        "created_by": thread.created_by,
+        "created_at": thread.created_at,
+        "updated_at": thread.updated_at,
+    }
+
+
+def _api_threads(thread_store, status: Optional[str] = None) -> dict:
+    if thread_store is None:
+        return {"threads": [], "total": 0}
+    threads = thread_store.list_threads(status=status, limit=200)
+    return {"threads": [_thread_row(t) for t in threads], "total": len(threads)}
+
+
+def _api_thread_detail(thread_store, thread_id: str) -> dict:
+    if thread_store is None:
+        return {"error": "thread store unavailable"}
+    thread = thread_store.get_thread(thread_id)
+    if not thread:
+        return {"error": "thread not found"}
+    messages = thread_store.get_messages(thread_id)
+    task_ids = thread_store.get_tasks_for_thread(thread_id)
+    return {
+        "thread": _thread_row(thread),
+        "messages": [
+            {"id": m.id, "role": m.role, "body": m.body, "created_at": m.created_at}
+            for m in messages
+        ],
+        "task_ids": task_ids,
+    }
+
+
+def _api_thread_reply(thread_store, store: TaskStore, thread_id: str, body: dict) -> dict:
+    """Human posts a reply; marks thread as replied so agent picks it up next cycle."""
+    if thread_store is None:
+        return {"error": "thread store unavailable"}
+    thread = thread_store.get_thread(thread_id)
+    if not thread:
+        return {"error": "thread not found"}
+    if thread.status == "closed":
+        return {"error": "thread is closed"}
+    text = str(body.get("body", "")).strip()
+    if not text:
+        return {"error": "body required"}
+    thread_store.add_message(thread_id, "human", text)
+    thread_store.set_status(thread_id, "replied")
+    return {"status": "ok", "thread_id": thread_id}
+
+
+def _api_create_thread(thread_store, store: TaskStore, body: dict) -> dict:
+    """Human opens a new thread (Shape B) — creates thread + queued task."""
+    if thread_store is None:
+        return {"error": "thread store unavailable"}
+    title = str(body.get("title", "")).strip()
+    if not title:
+        return {"error": "title required"}
+    description = str(body.get("description", "")).strip()
+    import hashlib
+    from llm247_v2.core.models import Task, TaskSource
+    task_id = hashlib.sha256(f"inbox:{title}".encode()).hexdigest()[:12]
+    task = Task(
+        id=task_id,
+        title=title,
+        description=description,
+        source=TaskSource.MANUAL.value,
+        status=TaskStatus.QUEUED.value,
+        priority=int(body.get("priority", 3)),
+        created_at=datetime.now(timezone.utc).isoformat(),
+    )
+    store.insert_task(task)
+    opening = description or title
+    thread = thread_store.create_thread(title=title, created_by="human", body=opening)
+    thread_store.link_task(thread.id, task_id)
+    store.add_event(task_id, "injected", f"Created via Inbox (thread {thread.id})")
+    return {"status": "ok", "thread_id": thread.id, "task_id": task_id}
 
 
 def _dashboard_html() -> str:

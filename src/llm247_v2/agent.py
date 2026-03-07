@@ -29,12 +29,6 @@ from llm247_v2.core.models import Directive, ModelBindingPoint, Task, TaskStatus
 from llm247_v2.observability.observer import NullObserver, Observer
 from llm247_v2.execution.safety import SafetyPolicy
 from llm247_v2.storage.store import TaskStore
-from llm247_v2.github.client import GitHubClient
-from llm247_v2.github.format import (
-    fmt_abandoned, fmt_blocked_body, fmt_cancelled,
-    fmt_completed, fmt_pickup, fmt_still_blocked,
-)
-from llm247_v2.github.sync import sync_github_issues
 from llm247_v2.storage.thread_store import ThreadStore
 
 logger = logging.getLogger("llm247_v2.agent")
@@ -68,9 +62,7 @@ class AutonomousAgentV2:
         branch_prefix: str = "agent",
         interest_profile_path: Optional[Path] = None,
         shutdown_event: Optional[threading.Event] = None,
-        github_client: Optional[GitHubClient] = None,
         thread_store: Optional[ThreadStore] = None,
-        dashboard_url: str = "",
     ) -> None:
         self.workspace = workspace.resolve()
         self.store = store
@@ -83,10 +75,7 @@ class AutonomousAgentV2:
         self.obs = observer or NullObserver()
         self.branch_prefix = branch_prefix
         self._shutdown = shutdown_event or threading.Event()
-        self.github = github_client
         self.thread_store = thread_store
-        self.dashboard_url = dashboard_url
-        self._last_github_sync: Optional[str] = None
 
     @property
     def shutdown_requested(self) -> bool:
@@ -120,8 +109,8 @@ class AutonomousAgentV2:
         }
 
         try:
-            if self.github and self.thread_store:
-                self._phase_sync_github_issues()
+            if self.thread_store:
+                self._phase_check_thread_replies()
             summary["tasks_discovered"] = self._phase_discover(directive, constitution, cycle_id)
             self._check_shutdown("between discover and execute")
             executed, completed, failed = self._phase_execute(directive, constitution, cycle_id)
@@ -259,10 +248,10 @@ class AutonomousAgentV2:
 
         if success:
             self.obs.task_completed(task.id, task.title)
-            self._github_on_task_completed(task)
+            self._on_task_completed(task)
         else:
             self.obs.task_needs_human(task.id, task.error_message[:120])
-            self._github_on_task_blocked(task)
+            self._on_task_blocked(task)
 
         self.obs.system_event(
             "task_cost",
@@ -272,133 +261,73 @@ class AutonomousAgentV2:
         self._maybe_consolidate_experience()
         return success
 
-    # ── GitHub integration ────────────────────────────────────────────────────
+    # ── Thread interaction ────────────────────────────────────────────────────
 
-    def _phase_sync_github_issues(self) -> None:
-        assert self.github and self.thread_store
-        from datetime import datetime, timezone
-        result = sync_github_issues(
-            self.github, self.thread_store, self.store, self._last_github_sync
-        )
-        self._last_github_sync = datetime.now(timezone.utc).isoformat()
-
-        # Shape B: new issues → create tasks
-        for thread in result.new_threads:
-            messages = self.thread_store.get_messages(thread.id)
-            description = messages[0].body if messages else ""
-            task = Task(
-                id=_new_task_id(),
-                title=thread.github_issue_title,
-                description=description,
-                source="github_issue",
-                status=TaskStatus.QUEUED.value,
-                priority=3,
-                github_issue_url=thread.github_issue_url,
-            )
-            self.store.insert_task(task)
-            self.thread_store.link_task(thread.id, task.id)
-            self.thread_store.set_status(thread.id, "linked")
-            self.thread_store.queue_agent_comment(thread.id, fmt_pickup(task.id))
-            if self.github:
-                try:
-                    self.github.add_labels(thread.github_issue_number, ["in-progress"])
-                except Exception as exc:
-                    logger.warning("Failed to add in-progress label: %s", exc)
-            self.obs.task_queued(task.id, task.title, "github_issue")
-
-        # Shape A: human replied → re-queue blocked tasks
-        for thread, _new_messages in result.unblocked:
+    def _phase_check_thread_replies(self) -> None:
+        """Resume tasks that have received a human reply since last cycle."""
+        assert self.thread_store
+        for thread in self.thread_store.get_replied_threads():
             for task_id in self.thread_store.get_tasks_for_thread(thread.id):
                 task = self.store.get_task(task_id)
                 if task and task.status == TaskStatus.NEEDS_HUMAN.value:
                     task.status = TaskStatus.HUMAN_RESOLVED.value
                     task.human_help_request = ""
                     self.store.update_task(task)
-            self.thread_store.set_status(thread.id, "linked")
-            try:
-                self.github.remove_label(thread.github_issue_number, "needs-human")
-            except Exception as exc:
-                logger.warning("Failed to remove needs-human label: %s", exc)
+            self.thread_store.set_status(thread.id, "waiting_reply")
+            self.obs.system_event("thread_reply_processed", f"thread={thread.id}")
 
-        # Cancelled: human closed issue → cancel linked tasks
-        for task_id in result.cancelled_task_ids:
-            task = self.store.get_task(task_id)
-            if task and task.status not in (
-                TaskStatus.COMPLETED.value, TaskStatus.FAILED.value, TaskStatus.CANCELLED.value
-            ):
-                task.status = TaskStatus.CANCELLED.value
-                self.store.update_task(task)
-                thread = self.thread_store.get_thread_for_task(task_id)
-                if thread:
-                    self.thread_store.queue_agent_comment(thread.id, fmt_cancelled(task_id))
-
-        if result.new_threads or result.unblocked or result.cancelled_task_ids:
-            self.obs.system_event(
-                "github_sync",
-                f"new={len(result.new_threads)} unblocked={len(result.unblocked)} "
-                f"cancelled={len(result.cancelled_task_ids)} "
-                f"comments_posted={result.comments_posted}",
-            )
-
-    def _github_on_task_blocked(self, task: Task) -> None:
-        if not self.github or not self.thread_store:
+    def _on_task_blocked(self, task: Task) -> None:
+        """Create or update a thread when the agent cannot proceed alone."""
+        if not self.thread_store:
             return
         thread = self.thread_store.get_thread_for_task(task.id)
-        try:
-            if thread:
-                attempt = self.thread_store.count_agent_messages(thread.id) + 1
-                if attempt >= self.MAX_BLOCK_ATTEMPTS:
-                    self.thread_store.queue_agent_comment(
-                        thread.id, fmt_abandoned(task, attempt)
-                    )
-                    self.github.close_issue(thread.github_issue_number,
-                                            state_reason="not_planned")
-                    self.thread_store.set_status(thread.id, "closed_abandoned")
-                    task.status = TaskStatus.FAILED.value
-                    self.store.update_task(task)
-                else:
-                    self.thread_store.queue_agent_comment(
-                        thread.id, fmt_still_blocked(task, attempt)
-                    )
-                    self.thread_store.set_status(thread.id, "awaiting_human")
-                    self.github.add_labels(thread.github_issue_number, ["needs-human"])
-            else:
-                # No existing issue — open one (Shape A)
-                issue = self.github.create_issue(
-                    title=f"[sprout] blocked: {task.title}",
-                    body=fmt_blocked_body(task, self.dashboard_url),
-                    labels=[self.github.label, "needs-human"],
-                    assignees=self.github.assignees,
+        if thread:
+            attempt = self.thread_store.count_agent_messages(thread.id) + 1
+            if attempt >= self.MAX_BLOCK_ATTEMPTS:
+                self.thread_store.add_message(
+                    thread.id, "agent",
+                    f"Giving up after {attempt} attempt(s). Last error: "
+                    f"{task.error_message or '(see task detail)'}",
                 )
-                task.github_issue_url = issue["html_url"]
+                self.thread_store.set_status(thread.id, "closed")
+                task.status = TaskStatus.FAILED.value
                 self.store.update_task(task)
-                new_thread = self.thread_store.upsert_thread(issue, created_by="agent")
-                self.thread_store.link_task(new_thread.id, task.id)
-                self.thread_store.set_status(new_thread.id, "awaiting_human")
-        except Exception as exc:
-            logger.warning("GitHub blocked-issue update failed for %s: %s", task.id, exc)
+            else:
+                self.thread_store.add_message(
+                    thread.id, "agent",
+                    f"Still blocked (attempt {attempt}): "
+                    f"{task.human_help_request or task.error_message or '(see task detail)'}",
+                )
+                self.thread_store.set_status(thread.id, "waiting_reply")
+        else:
+            body = (
+                f"{task.human_help_request or 'Task did not complete — see execution trace.'}\n\n"
+                f"Task: `{task.id}` | Source: {task.source}"
+            )
+            thread = self.thread_store.create_thread(
+                title=task.title, created_by="agent", body=body
+            )
+            self.thread_store.link_task(thread.id, task.id)
+            self.thread_store.set_status(thread.id, "waiting_reply")
 
-    def _github_on_task_completed(self, task: Task) -> None:
-        if not self.github or not self.thread_store:
+    def _on_task_completed(self, task: Task) -> None:
+        """Close thread when all linked tasks are done."""
+        if not self.thread_store:
             return
         thread = self.thread_store.get_thread_for_task(task.id)
         if not thread:
             return
-        try:
-            all_task_ids = self.thread_store.get_tasks_for_thread(thread.id)
-            all_done = all(
-                self.store.get_task(tid) and self.store.get_task(tid).status in (
-                    TaskStatus.COMPLETED.value, TaskStatus.FAILED.value,
-                    TaskStatus.CANCELLED.value,
-                )
-                for tid in all_task_ids
+        all_task_ids = self.thread_store.get_tasks_for_thread(thread.id)
+        all_done = all(
+            (t := self.store.get_task(tid)) is not None and t.status in (
+                TaskStatus.COMPLETED.value, TaskStatus.FAILED.value, TaskStatus.CANCELLED.value,
             )
-            if all_done:
-                self.thread_store.queue_agent_comment(thread.id, fmt_completed(task))
-                self.github.close_issue(thread.github_issue_number, state_reason="completed")
-                self.thread_store.set_status(thread.id, "closed_completed")
-        except Exception as exc:
-            logger.warning("GitHub completion update failed for %s: %s", task.id, exc)
+            for tid in all_task_ids
+        )
+        if all_done:
+            pr = f"\n\nPR: {task.pr_url}" if task.pr_url else ""
+            self.thread_store.add_message(thread.id, "agent", f"Completed.{pr}")
+            self.thread_store.set_status(thread.id, "closed")
 
     # ── Support ───────────────────────────────────────────────────────────────
 

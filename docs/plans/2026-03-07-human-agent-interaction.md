@@ -1,4 +1,4 @@
-# Plan: Human-Agent Interaction via GitHub Issues
+# Plan: Human-Agent Interaction via Native Dashboard Inbox
 
 > Status: In Progress
 > Created: 2026-03-07
