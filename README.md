@@ -12,34 +12,9 @@ It is not just an automation runtime. Sprout is designed to operate continuously
 - **Human-friendly observability**: exposes logs, audit trails, task history, and dashboard controls
 - **Reviewable and controllable behavior**: humans can inspect, pause, redirect, constrain, or stop the runtime
 
-## Current Runtime
-
-The only supported runtime lives in `src/llm247_v2/`.
-
-Runtime state is stored under `.llm247_v2/`, including task history, experience storage, model registry, directive state, logs, and LLM audit records.
-
-## Architecture
-
-Sprout is organized around seven subsystem boundaries:
-
-- **Core**: shared models, directive, constitution, immutable rules
-- **LLM**: model communication and prompt rendering
-- **Storage**: SQLite-backed persistence
-- **Observability**: event emission, logs, audit trail
-- **Discovery**: task candidate generation and ranking
-- **Execution**: planning, worktree execution, verification, git operations
-- **Dashboard**: HTTP control plane and frontend
-
-The agent cycle is:
-
-1. Load directive and constitution
-2. Discover candidate work
-3. Execute the highest-value task
-4. Verify and ship reviewable changes
-5. Store learnings
-6. Emit audit and observability events
-
 ## Documentation
+
+Implementation details, runtime boundaries, and architecture are documented in [`docs/design/`](docs/design/).
 
 Authoritative project documentation lives under [`docs/design/`](docs/design/):
 
