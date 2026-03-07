@@ -25,10 +25,11 @@ from llm247_v2.discovery.interest import (
 )
 from llm247_v2.execution.loop import ReActLoop, format_execution_log, serialize_trace
 from llm247_v2.llm.client import BudgetExhaustedError, LLMClient, TokenTracker, client_for_point, extract_json
-from llm247_v2.core.models import Directive, ModelBindingPoint, TaskStatus
+from llm247_v2.core.models import Directive, ModelBindingPoint, Task, TaskStatus
 from llm247_v2.observability.observer import NullObserver, Observer
 from llm247_v2.execution.safety import SafetyPolicy
 from llm247_v2.storage.store import TaskStore
+from llm247_v2.storage.thread_store import ThreadStore
 
 logger = logging.getLogger("llm247_v2.agent")
 
@@ -45,6 +46,9 @@ class AutonomousAgentV2:
     cross-cutting concerns (token tracking, experience, observability).
     """
 
+    # Maximum consecutive blocks before agent gives up on a task
+    MAX_BLOCK_ATTEMPTS = 5
+
     def __init__(
         self,
         workspace: Path,
@@ -58,6 +62,7 @@ class AutonomousAgentV2:
         branch_prefix: str = "agent",
         interest_profile_path: Optional[Path] = None,
         shutdown_event: Optional[threading.Event] = None,
+        thread_store: Optional[ThreadStore] = None,
     ) -> None:
         self.workspace = workspace.resolve()
         self.store = store
@@ -70,6 +75,7 @@ class AutonomousAgentV2:
         self.obs = observer or NullObserver()
         self.branch_prefix = branch_prefix
         self._shutdown = shutdown_event or threading.Event()
+        self.thread_store = thread_store
 
     @property
     def shutdown_requested(self) -> bool:
@@ -103,6 +109,8 @@ class AutonomousAgentV2:
         }
 
         try:
+            if self.thread_store:
+                self._phase_check_thread_replies()
             summary["tasks_discovered"] = self._phase_discover(directive, constitution, cycle_id)
             self._check_shutdown("between discover and execute")
             executed, completed, failed = self._phase_execute(directive, constitution, cycle_id)
@@ -240,8 +248,10 @@ class AutonomousAgentV2:
 
         if success:
             self.obs.task_completed(task.id, task.title)
+            self._on_task_completed(task)
         else:
             self.obs.task_needs_human(task.id, task.error_message[:120])
+            self._on_task_blocked(task)
 
         self.obs.system_event(
             "task_cost",
@@ -250,6 +260,74 @@ class AutonomousAgentV2:
         self._extract_and_store_learnings(task, "completed" if success else "failed")
         self._maybe_consolidate_experience()
         return success
+
+    # ── Thread interaction ────────────────────────────────────────────────────
+
+    def _phase_check_thread_replies(self) -> None:
+        """Resume tasks that have received a human reply since last cycle."""
+        assert self.thread_store
+        for thread in self.thread_store.get_replied_threads():
+            for task_id in self.thread_store.get_tasks_for_thread(thread.id):
+                task = self.store.get_task(task_id)
+                if task and task.status == TaskStatus.NEEDS_HUMAN.value:
+                    task.status = TaskStatus.HUMAN_RESOLVED.value
+                    task.human_help_request = ""
+                    self.store.update_task(task)
+            self.thread_store.set_status(thread.id, "waiting_reply")
+            self.obs.system_event("thread_reply_processed", f"thread={thread.id}")
+
+    def _on_task_blocked(self, task: Task) -> None:
+        """Create or update a thread when the agent cannot proceed alone."""
+        if not self.thread_store:
+            return
+        thread = self.thread_store.get_thread_for_task(task.id)
+        if thread:
+            attempt = self.thread_store.count_agent_messages(thread.id) + 1
+            if attempt >= self.MAX_BLOCK_ATTEMPTS:
+                self.thread_store.add_message(
+                    thread.id, "agent",
+                    f"Giving up after {attempt} attempt(s). Last error: "
+                    f"{task.error_message or '(see task detail)'}",
+                )
+                self.thread_store.set_status(thread.id, "closed")
+                task.status = TaskStatus.FAILED.value
+                self.store.update_task(task)
+            else:
+                self.thread_store.add_message(
+                    thread.id, "agent",
+                    f"Still blocked (attempt {attempt}): "
+                    f"{task.human_help_request or task.error_message or '(see task detail)'}",
+                )
+                self.thread_store.set_status(thread.id, "waiting_reply")
+        else:
+            body = (
+                f"{task.human_help_request or 'Task did not complete — see execution trace.'}\n\n"
+                f"Task: `{task.id}` | Source: {task.source}"
+            )
+            thread = self.thread_store.create_thread(
+                title=task.title, created_by="agent", body=body
+            )
+            self.thread_store.link_task(thread.id, task.id)
+            self.thread_store.set_status(thread.id, "waiting_reply")
+
+    def _on_task_completed(self, task: Task) -> None:
+        """Close thread when all linked tasks are done."""
+        if not self.thread_store:
+            return
+        thread = self.thread_store.get_thread_for_task(task.id)
+        if not thread:
+            return
+        all_task_ids = self.thread_store.get_tasks_for_thread(thread.id)
+        all_done = all(
+            (t := self.store.get_task(tid)) is not None and t.status in (
+                TaskStatus.COMPLETED.value, TaskStatus.FAILED.value, TaskStatus.CANCELLED.value,
+            )
+            for tid in all_task_ids
+        )
+        if all_done:
+            pr = f"\n\nPR: {task.pr_url}" if task.pr_url else ""
+            self.thread_store.add_message(thread.id, "agent", f"Completed.{pr}")
+            self.thread_store.set_status(thread.id, "closed")
 
     # ── Support ───────────────────────────────────────────────────────────────
 
@@ -369,3 +447,8 @@ def run_agent_loop(
 
 def _get_tracker(llm) -> Optional[TokenTracker]:
     return getattr(llm, "tracker", None)
+
+
+def _new_task_id() -> str:
+    import uuid
+    return uuid.uuid4().hex[:12]

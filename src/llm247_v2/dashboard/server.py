@@ -72,6 +72,7 @@ def serve_dashboard(
     experience_store: Optional[ExperienceStore] = None,
     model_store: Optional[ModelRegistryStore] = None,
     bootstrap_status_provider: Optional[Callable[[], dict]] = None,
+    thread_store=None,
 ) -> None:
     """Start HTTP control plane server."""
     _state_dir = state_dir or directive_path.parent
@@ -88,7 +89,13 @@ def serve_dashboard(
                 self._serve_json(_api_tasks(store))
             elif path.startswith("/api/tasks/"):
                 task_id = path.split("/api/tasks/")[1].split("?")[0]
-                self._serve_json(_api_task_detail(store, task_id))
+                self._serve_json(_api_task_detail(store, task_id, thread_store=thread_store))
+            elif path == "/api/threads":
+                status_filter = qs.get("status", [""])[0]
+                self._serve_json(_api_threads(thread_store, status=status_filter or None))
+            elif path.startswith("/api/threads/"):
+                thread_id = path.split("/api/threads/")[1].split("?")[0]
+                self._serve_json(_api_thread_detail(thread_store, thread_id))
             elif path == "/api/cycles":
                 self._serve_json(_api_cycles(store))
             elif path == "/api/stats":
@@ -150,6 +157,17 @@ def serve_dashboard(
             elif self.path == "/api/help-center/resolve":
                 body = self._read_body()
                 self._serve_json(_api_resolve_help_request(store, body))
+            elif self.path.startswith("/api/threads/") and self.path.endswith("/reply"):
+                thread_id = self.path.split("/api/threads/")[1].split("/reply")[0]
+                body = self._read_body()
+                self._serve_json(_api_thread_reply(thread_store, store, thread_id, body))
+            elif self.path.startswith("/api/threads/") and self.path.endswith("/close"):
+                thread_id = self.path.split("/api/threads/")[1].split("/close")[0]
+                body = self._read_body()
+                self._serve_json(_api_close_thread(thread_store, store, thread_id, body))
+            elif self.path == "/api/threads":
+                body = self._read_body()
+                self._serve_json(_api_create_thread(thread_store, store, body))
             else:
                 self.send_error(HTTPStatus.NOT_FOUND)
 
@@ -237,12 +255,24 @@ def _api_tasks(store: TaskStore) -> dict:
     }
 
 
-def _api_task_detail(store: TaskStore, task_id: str) -> dict:
+def _api_task_detail(store: TaskStore, task_id: str, *, thread_store=None) -> dict:
     task = store.get_task(task_id)
     if not task:
         return {"error": "task not found"}
     events = store.get_events(task_id)
-    return {"task": _task_full(task), "events": events}
+    result: dict = {"task": _task_full(task), "events": events}
+    if thread_store:
+        thread = thread_store.get_thread_for_task(task_id)
+        if thread:
+            result["thread"] = {
+                "id": thread.id,
+                "status": thread.status,
+                "messages": [
+                    {"role": m.role, "body": m.body, "created_at": m.created_at}
+                    for m in thread_store.get_messages(thread.id)
+                ],
+            }
+    return result
 
 
 def _api_cycles(store: TaskStore) -> dict:
@@ -698,6 +728,110 @@ def _mask_api_key(api_key: str) -> str:
     if len(clean) <= 4:
         return "*" * len(clean)
     return f"{clean[:2]}***{clean[-2:]}"
+
+
+def _thread_row(thread) -> Dict:
+    return {
+        "id": thread.id,
+        "title": thread.title,
+        "status": thread.status,
+        "created_by": thread.created_by,
+        "created_at": thread.created_at,
+        "updated_at": thread.updated_at,
+    }
+
+
+def _api_threads(thread_store, status: Optional[str] = None) -> dict:
+    if thread_store is None:
+        return {"threads": [], "total": 0}
+    threads = thread_store.list_threads(status=status, limit=200)
+    return {"threads": [_thread_row(t) for t in threads], "total": len(threads)}
+
+
+def _api_thread_detail(thread_store, thread_id: str) -> dict:
+    if thread_store is None:
+        return {"error": "thread store unavailable"}
+    thread = thread_store.get_thread(thread_id)
+    if not thread:
+        return {"error": "thread not found"}
+    messages = thread_store.get_messages(thread_id)
+    task_ids = thread_store.get_tasks_for_thread(thread_id)
+    return {
+        "thread": _thread_row(thread),
+        "messages": [
+            {"id": m.id, "role": m.role, "body": m.body, "created_at": m.created_at}
+            for m in messages
+        ],
+        "task_ids": task_ids,
+    }
+
+
+def _api_thread_reply(thread_store, store: TaskStore, thread_id: str, body: dict) -> dict:
+    """Human posts a reply; marks thread as replied so agent picks it up next cycle."""
+    if thread_store is None:
+        return {"error": "thread store unavailable"}
+    thread = thread_store.get_thread(thread_id)
+    if not thread:
+        return {"error": "thread not found"}
+    if thread.status == "closed":
+        return {"error": "thread is closed"}
+    text = str(body.get("body", "")).strip()
+    if not text:
+        return {"error": "body required"}
+    thread_store.add_message(thread_id, "human", text)
+    thread_store.set_status(thread_id, "replied")
+    return {"status": "ok", "thread_id": thread_id}
+
+
+def _api_close_thread(thread_store, store: TaskStore, thread_id: str, body: dict) -> dict:
+    """Human closes a thread; linked NEEDS_HUMAN / QUEUED tasks are moved to FAILED."""
+    if thread_store is None:
+        return {"error": "thread store unavailable"}
+    thread = thread_store.get_thread(thread_id)
+    if not thread:
+        return {"error": "thread not found"}
+    if thread.status == "closed":
+        return {"error": "thread already closed"}
+    reason = str(body.get("reason", "")).strip() or "Closed by human"
+    thread_store.add_message(thread_id, "human", reason)
+    thread_store.set_status(thread_id, "closed")
+    cancellable = {TaskStatus.NEEDS_HUMAN.value, TaskStatus.QUEUED.value}
+    for task_id in thread_store.get_tasks_for_thread(thread_id):
+        task = store.get_task(task_id)
+        if task and task.status in cancellable:
+            task.status = TaskStatus.FAILED.value
+            task.error_message = f"Cancelled by human: {reason}"
+            store.update_task(task)
+            store.add_event(task_id, "cancelled", f"Human closed thread: {reason}")
+    return {"status": "ok", "thread_id": thread_id}
+
+
+def _api_create_thread(thread_store, store: TaskStore, body: dict) -> dict:
+    """Human opens a new thread (Shape B) — creates thread + queued task."""
+    if thread_store is None:
+        return {"error": "thread store unavailable"}
+    title = str(body.get("title", "")).strip()
+    if not title:
+        return {"error": "title required"}
+    description = str(body.get("description", "")).strip()
+    import hashlib
+    from llm247_v2.core.models import Task, TaskSource
+    task_id = hashlib.sha256(f"inbox:{title}".encode()).hexdigest()[:12]
+    task = Task(
+        id=task_id,
+        title=title,
+        description=description,
+        source=TaskSource.MANUAL.value,
+        status=TaskStatus.QUEUED.value,
+        priority=int(body.get("priority", 3)),
+        created_at=datetime.now(timezone.utc).isoformat(),
+    )
+    store.insert_task(task)
+    opening = description or title
+    thread = thread_store.create_thread(title=title, created_by="human", body=opening)
+    thread_store.link_task(thread.id, task_id)
+    store.add_event(task_id, "injected", f"Created via Inbox (thread {thread.id})")
+    return {"status": "ok", "thread_id": thread.id, "task_id": task_id}
 
 
 def _dashboard_html() -> str:

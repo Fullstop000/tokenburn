@@ -6,6 +6,7 @@ import { Toaster, toast } from 'sonner'
 import { DashboardShell } from './app/DashboardShell'
 import { dashboardApiClient } from './api/dashboardApi'
 import { DiscoveryPage } from './pages/DiscoveryPage'
+import { InboxPage } from './pages/InboxPage'
 import { MemoryAuditPage } from './pages/MemoryAuditPage'
 import { OverviewPage } from './pages/OverviewPage'
 import { WorkPage } from './pages/WorkPage'
@@ -33,6 +34,8 @@ import type {
   TaskDetail,
   TaskEvent,
   TaskSummary,
+  ThreadDetail,
+  ThreadSummary,
 } from './types/dashboard'
 
 function App() {
@@ -61,6 +64,11 @@ function App() {
   const [auditDetail, setAuditDetail] = useState<LlmAuditEntry | null>(null)
   const [helpRequests, setHelpRequests] = useState<TaskSummary[]>([])
   const [helpCount, setHelpCount] = useState(0)
+  const [threads, setThreads] = useState<ThreadSummary[]>([])
+  const [threadDetail, setThreadDetail] = useState<ThreadDetail | null>(null)
+  const [inboxUnread, setInboxUnread] = useState(0)
+  const [replyingThreadId, setReplyingThreadId] = useState('')
+  const [creatingThread, setCreatingThread] = useState(false)
   const [experiences, setExperiences] = useState<ExperienceEntry[]>([])
   const [registeredModels, setRegisteredModels] = useState<RegisteredModelEntry[]>([])
   const [bindingPoints, setBindingPoints] = useState<ModelBindingPointEntry[]>([])
@@ -146,6 +154,98 @@ function App() {
       showToast(`Failed to refresh help center: ${String(error)}`, false)
     }
   }, [])
+
+  const refreshThreads = useCallback(async (): Promise<void> => {
+    try {
+      const payload = await dashboardApiClient.getThreads()
+      setThreads(payload.threads ?? [])
+      setInboxUnread((payload.threads ?? []).filter((t) => t.status === 'waiting_reply').length)
+    } catch (error) {
+      showToast(`Failed to refresh inbox: ${String(error)}`, false)
+    }
+  }, [])
+
+  const openThreadDetail = useCallback(async (threadId: string): Promise<void> => {
+    try {
+      const payload = await dashboardApiClient.getThreadDetail(threadId)
+      if (payload.error) {
+        showToast(payload.error, false)
+        return
+      }
+      setThreadDetail(payload as ThreadDetail)
+    } catch (error) {
+      showToast(`Failed to load thread: ${String(error)}`, false)
+    }
+  }, [])
+
+  const replyToThread = async (threadId: string, body: string): Promise<void> => {
+    if (replyingThreadId) return
+    setReplyingThreadId(threadId)
+    try {
+      const payload = await dashboardApiClient.replyToThread(threadId, body)
+      if (payload.error) {
+        showToast(payload.error, false)
+        return
+      }
+      showToast('Reply sent')
+      await Promise.all([refreshThreads(), openThreadDetail(threadId)])
+    } catch (error) {
+      showToast(`Reply failed: ${String(error)}`, false)
+    } finally {
+      setReplyingThreadId('')
+    }
+  }
+
+  const createThread = async (title: string, description: string): Promise<void> => {
+    if (creatingThread) return
+    setCreatingThread(true)
+    try {
+      const payload = await dashboardApiClient.createThread({ title, description })
+      if (payload.error) {
+        showToast(payload.error, false)
+        return
+      }
+      showToast('Thread created — task queued')
+      await refreshThreads()
+      if (payload.thread_id) await openThreadDetail(payload.thread_id)
+    } catch (error) {
+      showToast(`Create thread failed: ${String(error)}`, false)
+    } finally {
+      setCreatingThread(false)
+    }
+  }
+
+  const bulkCloseThreads = async (threadIds: string[]): Promise<void> => {
+    try {
+      const payload = await dashboardApiClient.bulkCloseThreads(threadIds)
+      if (payload.error) {
+        showToast(payload.error, false)
+        return
+      }
+      showToast(`Closed ${payload.closed ?? threadIds.length} threads`)
+      await refreshThreads()
+      if (threadDetail && threadIds.includes(threadDetail.thread.id)) {
+        await openThreadDetail(threadDetail.thread.id)
+      }
+    } catch (error) {
+      showToast(`Bulk close failed: ${String(error)}`, false)
+    }
+  }
+
+  const closeThread = async (threadId: string, reason: string): Promise<void> => {
+    try {
+      const payload = await dashboardApiClient.closeThread(threadId, reason)
+      if (payload.error) {
+        showToast(payload.error, false)
+        return
+      }
+      showToast('Thread closed')
+      await refreshThreads()
+      await openThreadDetail(threadId)
+    } catch (error) {
+      showToast(`Close thread failed: ${String(error)}`, false)
+    }
+  }
 
   const refreshExperiences = useCallback(async (): Promise<void> => {
     try {
@@ -426,6 +526,15 @@ function App() {
   }, [refreshHelpCenter])
 
   useEffect(() => {
+    const kickoffId = window.setTimeout(() => void refreshThreads(), 0)
+    const timerId = window.setInterval(() => void refreshThreads(), activePage === 'inbox' ? 3000 : 8000)
+    return () => {
+      window.clearTimeout(kickoffId)
+      window.clearInterval(timerId)
+    }
+  }, [refreshThreads, activePage])
+
+  useEffect(() => {
     if (activePage !== 'memory') return
     const kickoffId = window.setTimeout(() => void refreshExperiences(), 0)
     const timerId = window.setInterval(() => void refreshExperiences(), 8000)
@@ -470,6 +579,21 @@ function App() {
         taskDetail={taskDetail}
         taskEvents={taskEvents}
         tasks={tasks}
+      />
+    )
+  } else if (activePage === 'inbox') {
+    pageContent = (
+      <InboxPage
+        threads={threads}
+        threadDetail={threadDetail}
+        onSelectThread={(id) => void openThreadDetail(id)}
+        onReply={(id, body) => replyToThread(id, body)}
+        onCreateThread={(title, desc) => createThread(title, desc)}
+        onCloseThread={(id, reason) => closeThread(id, reason)}
+        onBulkClose={(ids) => bulkCloseThreads(ids)}
+        onRefresh={() => void refreshThreads()}
+        replying={Boolean(replyingThreadId)}
+        creating={creatingThread}
       />
     )
   } else if (activePage === 'discovery') {
@@ -559,6 +683,7 @@ function App() {
         bootstrapStatus={bootstrapStatus}
         directive={directive}
         metaText={metaText}
+        inboxUnread={inboxUnread}
         onNavigate={setActivePage}
         onTogglePause={() => void togglePause()}
         pauseLoading={pauseLoading}
