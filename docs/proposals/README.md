@@ -13,6 +13,7 @@
 
 | Status | Proposal | Scope | Next Step |
 |--------|----------|-------|-----------|
+| `Draft` | [2026-03-07-human-agent-interaction.md](2026-03-07-human-agent-interaction.md) | Replace one-way `human_help_request` handoff with threaded issue + chat model | Decide first deliverable slice and whether to plan |
 | `Draft` | [2026-03-07-openclaw-memory-architecture.md](2026-03-07-openclaw-memory-architecture.md) | Benchmark Sprout memory architecture against OpenClaw's memory subsystem | Decide whether one narrow memory change is worth turning into a plan |
 | `Draft` | [2026-03-07-lab.md](2026-03-07-lab.md) | Continuous lab environment for observing long-term agent evolution | Decide whether to fund Phase A (`Greenhouse`) and then write an implementation plan |
 | `Review Needed` | [2026-03-07-e2e-testing.md](2026-03-07-e2e-testing.md) | Multi-layer end-to-end testing strategy for the V2 agent runtime | Decide the first deliverable and split it into one or more plans |
