@@ -95,12 +95,23 @@ class TestTaskStore(unittest.TestCase):
         self.assertEqual(cycles[0].tasks_discovered, 3)
 
     def test_stats(self):
-        self.store.insert_task(self._make_task("t1", status="queued"))
-        self.store.insert_task(self._make_task("t2", status="completed"))
+        queued = self._make_task("t1", status="queued")
+        queued.prompt_token_cost = 30
+        queued.completion_token_cost = 10
+        queued.token_cost = 40
+        completed = self._make_task("t2", status="completed")
+        completed.prompt_token_cost = 70
+        completed.completion_token_cost = 20
+        completed.token_cost = 90
+        self.store.insert_task(queued)
+        self.store.insert_task(completed)
         stats = self.store.get_stats()
         self.assertEqual(stats["total_tasks"], 2)
         self.assertEqual(stats["status_counts"]["queued"], 1)
         self.assertEqual(stats["status_counts"]["completed"], 1)
+        self.assertEqual(stats["input_tokens"], 100)
+        self.assertEqual(stats["output_tokens"], 30)
+        self.assertEqual(stats["total_tokens"], 130)
 
     def test_insert_ignore_duplicate_id(self):
         self.store.insert_task(self._make_task("t1", "First"))

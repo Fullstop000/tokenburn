@@ -68,10 +68,16 @@ class TestDashboardAPI(unittest.TestCase):
         self.store.insert_task(Task(
             id="t1", title="T", description="D", source="manual",
             status="completed", priority=2,
+            prompt_token_cost=120,
+            completion_token_cost=45,
+            token_cost=165,
         ))
         stats = _api_stats(self.store)
         self.assertEqual(stats["total_tasks"], 1)
         self.assertIn("completed", stats["status_counts"])
+        self.assertEqual(stats["input_tokens"], 120)
+        self.assertEqual(stats["output_tokens"], 45)
+        self.assertEqual(stats["total_tokens"], 165)
 
     def test_inject_task(self):
         result = _api_inject_task(self.store, {"title": "Manual task", "priority": 1})
@@ -291,16 +297,58 @@ class TestDashboardAPI(unittest.TestCase):
         self.assertIsNone(self.model_store.get_model(model.id))
         self.assertIsNone(self.model_store.get_binding(ModelBindingPoint.EXECUTION.value))
 
-    def test_discovery_api_projects_recent_activity(self):
+    def test_discovery_api_supports_new_event_envelope(self):
         activity_path = Path(self.tmp.name) / "activity.jsonl"
         activity_path.write_text(
             "\n".join([
-                json.dumps({"phase": "discover", "action": "strategy_selected", "detail": "change_hotspot │ queue=0", "reasoning": "Prefer neglected areas"}),
-                json.dumps({"phase": "discover", "action": "candidate_found", "task_id": "t1", "detail": "[todo] Fix stale TODO"}),
-                json.dumps({"phase": "value", "action": "scored", "task_id": "t1", "detail": "score=0.820 rec=execute │ Fix stale TODO", "reasoning": "[heuristic] impact=0.80"}),
-                json.dumps({"phase": "value", "action": "filtered_out", "task_id": "t2", "detail": "score=0.120 │ Minor cleanup", "reasoning": "heuristic score too low"}),
-                json.dumps({"phase": "discover", "action": "queued", "task_id": "t1", "detail": "Fix stale TODO (source=todo_scan)"}),
-                json.dumps({"phase": "discover", "action": "funnel", "detail": "raw=2 → heuristic=1 → llm=1 → final=1"}),
+                json.dumps({
+                    "module": "Discovery",
+                    "family": "strategy",
+                    "event_name": "strategy_selected",
+                    "detail": "change_hotspot │ queue=0",
+                    "reasoning": "Prefer neglected areas",
+                }),
+                json.dumps({
+                    "module": "Discovery",
+                    "family": "candidate",
+                    "event_name": "candidate_found",
+                    "task_id": "t1",
+                    "detail": "[todo] Fix stale TODO",
+                    "data": {"candidate_id": "cand-1", "source": "todo_scan"},
+                }),
+                json.dumps({
+                    "module": "Discovery",
+                    "family": "valuation",
+                    "event_name": "candidate_scored",
+                    "task_id": "t1",
+                    "detail": "score=0.820 rec=execute │ Fix stale TODO",
+                    "reasoning": "[heuristic] impact=0.80",
+                    "data": {"candidate_id": "cand-1", "score": 0.82},
+                }),
+                json.dumps({
+                    "module": "Discovery",
+                    "family": "valuation",
+                    "event_name": "candidate_filtered_out",
+                    "task_id": "t2",
+                    "detail": "score=0.120 │ Minor cleanup",
+                    "reasoning": "heuristic score too low",
+                    "data": {"candidate_id": "cand-2", "score": 0.12},
+                }),
+                json.dumps({
+                    "module": "Discovery",
+                    "family": "queue",
+                    "event_name": "candidate_queued",
+                    "task_id": "t1",
+                    "detail": "Fix stale TODO (source=todo_scan)",
+                    "data": {"candidate_id": "cand-1", "source": "todo_scan"},
+                }),
+                json.dumps({
+                    "module": "Discovery",
+                    "family": "funnel",
+                    "event_name": "funnel_summarized",
+                    "detail": "raw=2 → heuristic=1 → llm=1 → final=1",
+                    "data": {"raw_candidates": 2, "queued": 1},
+                }),
             ]) + "\n",
             encoding="utf-8",
         )
@@ -308,12 +356,49 @@ class TestDashboardAPI(unittest.TestCase):
         payload = _api_discovery(Path(self.tmp.name), limit=10)
 
         self.assertEqual(payload["strategy"]["action"], "strategy_selected")
-        self.assertEqual(payload["latest_funnel"]["action"], "funnel")
+        self.assertEqual(payload["strategy"]["event_name"], "strategy_selected")
+        self.assertEqual(payload["latest_funnel"]["action"], "funnel_summarized")
+        self.assertEqual(payload["latest_funnel"]["event_name"], "funnel_summarized")
         self.assertEqual(len(payload["candidates"]), 1)
         self.assertEqual(len(payload["scored"]), 1)
         self.assertEqual(len(payload["filtered_out"]), 1)
         self.assertEqual(len(payload["queued"]), 1)
         self.assertEqual(payload["counts"]["queued"], 1)
+
+    def test_discovery_api_enriches_queued_events_with_task_trace(self):
+        correlated_store = TaskStore(Path(self.tmp.name) / "tasks.db")
+        self.addCleanup(correlated_store.close)
+        correlated_store.insert_task(Task(
+            id="t1",
+            title="Fix stale TODO",
+            description="Clean up lingering TODO in parser",
+            source="todo_scan",
+            status=TaskStatus.QUEUED.value,
+            priority=2,
+            execution_trace="reactloop: step 1 -> inspect\nreactloop: step 2 -> patch",
+            branch_name="codex/fix-stale-todo",
+        ))
+
+        activity_path = Path(self.tmp.name) / "activity.jsonl"
+        activity_path.write_text(
+            json.dumps({
+                "module": "Discovery",
+                "family": "queue",
+                "event_name": "candidate_queued",
+                "task_id": "t1",
+                "detail": "Fix stale TODO (source=todo_scan)",
+                "data": {"source": "todo_scan", "title": "Fix stale TODO"},
+            }) + "\n",
+            encoding="utf-8",
+        )
+
+        payload = _api_discovery(Path(self.tmp.name), limit=10)
+
+        self.assertEqual(len(payload["queued"]), 1)
+        self.assertIn("task", payload["queued"][0])
+        self.assertEqual(payload["queued"][0]["task"]["id"], "t1")
+        self.assertIn("reactloop: step 1", payload["queued"][0]["task"]["execution_trace"])
+        self.assertEqual(payload["queued"][0]["task"]["branch_name"], "codex/fix-stale-todo")
 
 
 class TestPauseResumeAPI(unittest.TestCase):

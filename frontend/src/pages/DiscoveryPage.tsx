@@ -1,7 +1,7 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { PhaseBadge } from '@/components/ui/phase-badge'
 
-import { formatActivityMessage, formatTime } from '../lib/dashboardView'
+import { eventBadgeLabel, eventBadgeVariant, eventDisplayName, formatActivityMessage, formatTime } from '../lib/dashboardView'
 import type { DiscoveryEventEntry, DiscoveryPayload } from '../types/dashboard'
 
 interface DiscoveryPageProps {
@@ -28,13 +28,63 @@ function EventList({
           <div className="rounded-xl border border-border/50 bg-background/25 p-3" key={idx}>
             <div className="flex flex-wrap items-center gap-2">
               <span className="font-mono text-xs text-muted-foreground">{formatTime(String(event.ts ?? event.timestamp ?? ''))}</span>
-              <PhaseBadge phase={String(event.phase ?? 'discover')} />
-              <span className="font-mono text-xs">{String(event.action ?? '')}</span>
+              <PhaseBadge phase={eventBadgeVariant(event)} label={eventBadgeLabel(event)} />
+              <span className="font-mono text-xs">{eventDisplayName(event)}</span>
             </div>
             <p className="mt-2 text-sm text-foreground">{formatActivityMessage(event)}</p>
             {event.reasoning && <p className="mt-2 text-xs italic text-muted-foreground">{String(event.reasoning)}</p>}
           </div>
         )) : (
+          <div className="rounded-xl border border-dashed border-border/60 bg-muted/20 p-5 text-sm text-muted-foreground">
+            Not wired yet for this run. The backend has not emitted these events recently.
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  )
+}
+
+function QueuedEventList({ events }: { events: DiscoveryEventEntry[] }) {
+  return (
+    <Card className="border-border/60 bg-card/70">
+      <CardHeader>
+        <CardTitle>Queued Outcomes</CardTitle>
+        <CardDescription>Tasks that made it through the funnel and entered the task queue.</CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-2">
+        {events.length > 0 ? events.map((event, idx) => {
+          const task = event.task
+          const trace = String(task?.execution_trace ?? '').trim()
+          const branchName = String(task?.branch_name ?? '').trim()
+
+          return (
+            <div className="rounded-xl border border-border/50 bg-background/25 p-3" key={idx}>
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="font-mono text-xs text-muted-foreground">{formatTime(String(event.ts ?? event.timestamp ?? ''))}</span>
+                <PhaseBadge phase={eventBadgeVariant(event)} label={eventBadgeLabel(event)} />
+                <span className="font-mono text-xs">{eventDisplayName(event)}</span>
+                {task?.status && (
+                  <span className="rounded-full border border-border/60 px-2 py-0.5 text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
+                    {String(task.status)}
+                  </span>
+                )}
+              </div>
+              <p className="mt-2 text-sm text-foreground">{formatActivityMessage(event)}</p>
+              {branchName && (
+                <p className="mt-2 font-mono text-[11px] text-muted-foreground">
+                  branch: {branchName}
+                </p>
+              )}
+              {trace && (
+                <div className="mt-3 rounded-lg border border-border/50 bg-muted/30 p-3">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Execution Trace</p>
+                  <pre className="mt-2 overflow-x-auto whitespace-pre-wrap break-words font-mono text-[11px] text-foreground">{trace}</pre>
+                </div>
+              )}
+              {event.reasoning && <p className="mt-2 text-xs italic text-muted-foreground">{String(event.reasoning)}</p>}
+            </div>
+          )
+        }) : (
           <div className="rounded-xl border border-dashed border-border/60 bg-muted/20 p-5 text-sm text-muted-foreground">
             Not wired yet for this run. The backend has not emitted these events recently.
           </div>
@@ -112,7 +162,7 @@ export function DiscoveryPage({ discovery }: DiscoveryPageProps) {
       <div className="grid gap-4 xl:grid-cols-3">
         <EventList events={snapshot.scored} subtitle="Heuristic or LLM scoring decisions for candidates." title="Value Scores" />
         <EventList events={snapshot.filtered_out} subtitle="Candidates excluded from the queue and the recorded reason." title="Filtered Out" />
-        <EventList events={snapshot.queued} subtitle="Tasks that made it through the funnel and entered the task queue." title="Queued Outcomes" />
+        <QueuedEventList events={snapshot.queued} />
       </div>
     </div>
   )

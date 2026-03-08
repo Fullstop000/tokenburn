@@ -24,6 +24,8 @@ CREATE TABLE IF NOT EXISTS tasks (
     execution_log TEXT DEFAULT '',
     error_message TEXT DEFAULT '',
     cycle_id INTEGER DEFAULT 0,
+    prompt_token_cost INTEGER DEFAULT 0,
+    completion_token_cost INTEGER DEFAULT 0,
     token_cost INTEGER DEFAULT 0,
     time_cost_seconds REAL DEFAULT 0.0,
     whats_learned TEXT DEFAULT '',
@@ -57,6 +59,8 @@ CREATE INDEX IF NOT EXISTS idx_cycles_status ON cycles(status);
 """
 
 _MIGRATIONS = [
+    "ALTER TABLE tasks ADD COLUMN prompt_token_cost INTEGER DEFAULT 0",
+    "ALTER TABLE tasks ADD COLUMN completion_token_cost INTEGER DEFAULT 0",
     "ALTER TABLE tasks ADD COLUMN token_cost INTEGER DEFAULT 0",
     "ALTER TABLE tasks ADD COLUMN time_cost_seconds REAL DEFAULT 0.0",
     "ALTER TABLE tasks ADD COLUMN whats_learned TEXT DEFAULT ''",
@@ -88,6 +92,8 @@ def _row_to_task(row: sqlite3.Row) -> Task:
         execution_log=d["execution_log"],
         error_message=d["error_message"],
         cycle_id=d["cycle_id"],
+        prompt_token_cost=d.get("prompt_token_cost", 0) or 0,
+        completion_token_cost=d.get("completion_token_cost", 0) or 0,
         token_cost=d.get("token_cost", 0) or 0,
         time_cost_seconds=d.get("time_cost_seconds", 0.0) or 0.0,
         whats_learned=d.get("whats_learned", "") or "",
@@ -125,16 +131,17 @@ class TaskStore:
                    (id, title, description, source, status, priority,
                     created_at, updated_at, branch_name, pr_url, execution_trace,
                     execution_log, error_message, cycle_id,
-                    token_cost, time_cost_seconds, whats_learned, human_help_request)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    prompt_token_cost, completion_token_cost, token_cost,
+                    time_cost_seconds, whats_learned, human_help_request)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (
                     task.id, task.title, task.description, task.source,
                     task.status, task.priority,
                     task.created_at or now, task.updated_at or now,
                     task.branch_name, task.pr_url, task.execution_trace,
                     task.execution_log, task.error_message, task.cycle_id,
-                    task.token_cost, task.time_cost_seconds, task.whats_learned,
-                    task.human_help_request,
+                    task.prompt_token_cost, task.completion_token_cost, task.token_cost,
+                    task.time_cost_seconds, task.whats_learned, task.human_help_request,
                 ),
             )
             self._conn.commit()
@@ -147,7 +154,8 @@ class TaskStore:
                    title=?, description=?, source=?, status=?, priority=?,
                    updated_at=?, branch_name=?, pr_url=?, execution_trace=?,
                    execution_log=?, error_message=?, cycle_id=?,
-                   token_cost=?, time_cost_seconds=?, whats_learned=?,
+                   prompt_token_cost=?, completion_token_cost=?, token_cost=?,
+                   time_cost_seconds=?, whats_learned=?,
                    human_help_request=?
                    WHERE id=?""",
                 (
@@ -155,7 +163,8 @@ class TaskStore:
                     task.priority, now, task.branch_name, task.pr_url,
                     task.execution_trace, task.execution_log,
                     task.error_message, task.cycle_id,
-                    task.token_cost, task.time_cost_seconds, task.whats_learned,
+                    task.prompt_token_cost, task.completion_token_cost, task.token_cost,
+                    task.time_cost_seconds, task.whats_learned,
                     task.human_help_request, task.id,
                 ),
             )
@@ -293,7 +302,13 @@ class TaskStore:
         with self._lock:
             status_rows = self._conn.execute("SELECT status, COUNT(*) as cnt FROM tasks GROUP BY status").fetchall()
             cycle_row = self._conn.execute("SELECT COUNT(*) as cnt FROM cycles").fetchone()
-            token_row = self._conn.execute("SELECT COALESCE(SUM(token_cost), 0) as total FROM tasks").fetchone()
+            token_row = self._conn.execute(
+                """SELECT
+                   COALESCE(SUM(prompt_token_cost), 0) as input_total,
+                   COALESCE(SUM(completion_token_cost), 0) as output_total,
+                   COALESCE(SUM(token_cost), 0) as total
+                   FROM tasks"""
+            ).fetchone()
         counts: Dict[str, int] = {}
         for row in status_rows:
             counts[row["status"]] = row["cnt"]
@@ -302,6 +317,8 @@ class TaskStore:
             "total_tasks": total,
             "status_counts": counts,
             "total_cycles": cycle_row["cnt"] if cycle_row else 0,
+            "input_tokens": token_row["input_total"] if token_row else 0,
+            "output_tokens": token_row["output_total"] if token_row else 0,
             "total_tokens": token_row["total"] if token_row else 0,
         }
 

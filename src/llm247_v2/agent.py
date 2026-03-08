@@ -347,6 +347,8 @@ class AutonomousAgentV2:
         task.time_cost_seconds = round(time.monotonic() - start_time, 2)
         if tracker and snap_before:
             snap_after = tracker.snapshot()
+            task.prompt_token_cost = snap_after["prompt_tokens"] - snap_before["prompt_tokens"]
+            task.completion_token_cost = snap_after["completion_tokens"] - snap_before["completion_tokens"]
             task.token_cost = snap_after["total_tokens"] - snap_before["total_tokens"]
 
     def _extract_and_store_learnings(self, task, outcome: str) -> None:

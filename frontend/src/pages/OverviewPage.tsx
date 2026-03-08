@@ -3,7 +3,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { PhaseBadge } from '@/components/ui/phase-badge'
 import { StatusBadge } from '@/components/ui/status-badge'
 
-import { formatDateTime, formatTime, type ActivityEvent, type DashboardPage } from '../lib/dashboardView'
+import { eventBadgeLabel, eventBadgeVariant, formatActivityMessage, formatDateTime, formatTime, type ActivityEvent, type DashboardPage } from '../lib/dashboardView'
 import type { BootstrapStatusPayload, CycleSummary, DashboardStats, DirectivePayload, TaskSummary } from '../types/dashboard'
 
 interface OverviewPageProps {
@@ -32,7 +32,8 @@ export function OverviewPage({
   const statusCards = [
     { label: 'Total Tasks', value: stats.total_tasks ?? 0 },
     { label: 'Total Cycles', value: stats.total_cycles ?? 0 },
-    { label: 'Total Tokens', value: (stats.total_tokens ?? 0).toLocaleString() },
+    { label: 'Input Tokens', value: (stats.input_tokens ?? 0).toLocaleString() },
+    { label: 'Output Tokens', value: (stats.output_tokens ?? 0).toLocaleString() },
     { label: 'Needs Human', value: Number(stats.status_counts?.needs_human ?? 0) },
   ]
   const activeTask = tasks.find((task) => task.status === 'executing')
@@ -130,9 +131,9 @@ export function OverviewPage({
               {latestEvents.length > 0 ? latestEvents.map((event, idx) => (
                 <div className="flex items-start gap-3 rounded-lg border border-border/50 bg-background/30 px-3 py-2 text-sm" key={idx}>
                   <span className="w-16 shrink-0 font-mono text-xs text-muted-foreground">{formatTime(String(event.ts ?? event.timestamp ?? ''))}</span>
-                  <PhaseBadge phase={String(event.phase ?? 'system')} />
+                  <PhaseBadge phase={eventBadgeVariant(event)} label={eventBadgeLabel(event)} />
                   <div className="min-w-0 flex-1">
-                    <p className="text-foreground">{String(event.detail ?? event.action ?? '')}</p>
+                    <p className="text-foreground">{formatActivityMessage(event)}</p>
                     {event.reasoning && <p className="mt-1 text-xs italic text-muted-foreground">{String(event.reasoning)}</p>}
                   </div>
                 </div>

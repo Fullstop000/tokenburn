@@ -90,8 +90,8 @@ export class DashboardApiClient {
   }
 
   /** Fetch recent activity stream events. */
-  getActivity(limit = 250, phase = ''): Promise<{ events: Record<string, unknown>[]; total_returned: number }> {
-    const query = phase ? `?limit=${limit}&phase=${encodeURIComponent(phase)}` : `?limit=${limit}`
+  getActivity(limit = 250, module = ''): Promise<{ events: Record<string, unknown>[]; total_returned: number }> {
+    const query = module ? `?limit=${limit}&module=${encodeURIComponent(module)}` : `?limit=${limit}`
     return this.requestJson(`/api/activity${query}`)
   }
 

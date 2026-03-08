@@ -19,13 +19,13 @@ import {
 } from '@/components/ui/table'
 
 import { ActivityByTask } from '../components/activity/ActivityByTask'
-import { formatActivityMessage, formatDateTime, formatTime, type ActivityEvent, type MemoryPanel } from '../lib/dashboardView'
+import { eventBadgeLabel, eventBadgeVariant, formatActivityMessage, formatDateTime, formatTime, type ActivityEvent, type MemoryPanel } from '../lib/dashboardView'
 import type { ExperienceEntry, LlmAuditEntry, TaskSummary } from '../types/dashboard'
 
 interface MemoryAuditPageProps {
   activePanel: MemoryPanel
   activity: ActivityEvent[]
-  activityPhase: string
+  activityModule: string
   activityGroupBy: 'time' | 'task'
   collapsedTasks: Set<string>
   tasks: TaskSummary[]
@@ -38,7 +38,7 @@ interface MemoryAuditPageProps {
   onRefreshExperiences: () => void
   onOpenAuditDetail: (seq: number) => void
   onCloseAuditDetail: () => void
-  onChangeActivityPhase: (phase: string) => void
+  onChangeActivityModule: (module: string) => void
   onChangeActivityGroupBy: (groupBy: 'time' | 'task') => void
   onToggleCollapsedTask: (taskId: string) => void
 }
@@ -46,7 +46,7 @@ interface MemoryAuditPageProps {
 export function MemoryAuditPage({
   activePanel,
   activity,
-  activityPhase,
+  activityModule,
   activityGroupBy,
   collapsedTasks,
   tasks,
@@ -59,7 +59,7 @@ export function MemoryAuditPage({
   onRefreshExperiences,
   onOpenAuditDetail,
   onCloseAuditDetail,
-  onChangeActivityPhase,
+  onChangeActivityModule,
   onChangeActivityGroupBy,
   onToggleCollapsedTask,
 }: MemoryAuditPageProps) {
@@ -76,21 +76,19 @@ export function MemoryAuditPage({
           <CardHeader className="pb-3">
             <div className="flex flex-wrap items-center gap-3">
               <div className="min-w-[150px]">
-                <Select value={activityPhase || '__all__'} onValueChange={(value: string) => onChangeActivityPhase(value === '__all__' ? '' : value)}>
+                <Select value={activityModule || '__all__'} onValueChange={(value: string) => onChangeActivityModule(value === '__all__' ? '' : value)}>
                   <SelectTrigger className="w-[150px]">
-                    <SelectValue placeholder="All phases" />
+                    <SelectValue placeholder="All modules" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="__all__">All phases</SelectItem>
-                    <SelectItem value="cycle">cycle</SelectItem>
-                    <SelectItem value="discover">discover</SelectItem>
-                    <SelectItem value="value">value</SelectItem>
-                    <SelectItem value="plan">plan</SelectItem>
-                    <SelectItem value="execute">execute</SelectItem>
-                    <SelectItem value="verify">verify</SelectItem>
-                    <SelectItem value="git">git</SelectItem>
-                    <SelectItem value="decision">decision</SelectItem>
-                    <SelectItem value="system">system</SelectItem>
+                    <SelectItem value="__all__">All modules</SelectItem>
+                    <SelectItem value="Cycle">Cycle</SelectItem>
+                    <SelectItem value="Discovery">Discovery</SelectItem>
+                    <SelectItem value="Execution">Execution</SelectItem>
+                    <SelectItem value="Memory">Memory</SelectItem>
+                    <SelectItem value="Inbox">Inbox</SelectItem>
+                    <SelectItem value="LLM">LLM</SelectItem>
+                    <SelectItem value="ControlPlane">ControlPlane</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -109,7 +107,7 @@ export function MemoryAuditPage({
                   return (
                     <div className="flex items-start gap-3 border-b py-2 text-sm last:border-0" key={idx}>
                       <span className="w-20 shrink-0 font-mono text-xs text-muted-foreground">{formatTime(String(event.ts ?? event.timestamp ?? ''))}</span>
-                      <PhaseBadge phase={String(event.phase ?? '?')} />
+                      <PhaseBadge phase={eventBadgeVariant(event)} label={eventBadgeLabel(event)} />
                       <span className="text-foreground">
                         {taskId && <code className="mr-2 rounded bg-muted px-1 py-0.5 text-xs">{taskId.slice(0, 8)}</code>}
                         {formatActivityMessage(event)}

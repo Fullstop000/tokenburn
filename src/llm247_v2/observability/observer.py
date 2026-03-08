@@ -11,7 +11,7 @@ Usage from agent code::
         JsonLogHandler(jsonl_path),
         StoreHandler(task_store),
     ])
-    obs.emit(AgentEvent(phase="cycle", action="started", detail="Cycle #42"))
+    obs.emit(AgentEvent(module="Cycle", family="lifecycle", event_name="cycle_started", detail="Cycle #42"))
 
 Designed so humans can ``tail -f .llm247_v2/activity.log`` and see a clear,
 timestamped narrative of everything the agent does and *why*.
@@ -29,6 +29,7 @@ from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
+from uuid import uuid4
 
 logger = logging.getLogger("llm247_v2.observability.observer")
 
@@ -48,20 +49,90 @@ PHASE_LABELS = {
     "decision": "DECISION",
 }
 
+MODULE_TO_PHASE = {
+    "Cycle": "cycle",
+    "Discovery": "discover",
+    "Execution": "execute",
+    "Memory": "plan",
+    "Inbox": "system",
+    "LLM": "decision",
+    "ControlPlane": "system",
+}
+
+PHASE_TO_MODULE = {
+    "cycle": "Cycle",
+    "discover": "Discovery",
+    "value": "Discovery",
+    "plan": "Execution",
+    "execute": "Execution",
+    "verify": "Execution",
+    "git": "Execution",
+    "system": "ControlPlane",
+    "decision": "LLM",
+}
+
+ACTION_TO_FAMILY = {
+    "strategy_selected": "strategy",
+    "candidate_found": "candidate",
+    "queued": "queue",
+    "candidates": "funnel",
+    "funnel": "funnel",
+    "scored": "valuation",
+    "filtered_out": "valuation",
+    "assessed": "valuation",
+    "started": "planning",
+    "created": "planning",
+    "replan_triggered": "planning",
+    "replan_created": "planning",
+    "replan_exhausted": "planning",
+    "constitution_blocked": "planning",
+    "experience_injected": "planning",
+    "finished": "state",
+    "completed": "verification",
+    "task_completed": "state",
+    "task_failed": "state",
+    "task_needs_human": "state",
+    "worktree": "tool_call",
+    "committed": "tool_call",
+    "pushed": "tool_call",
+    "pr_created": "tool_call",
+    "pr_failed": "tool_call",
+    "made": "audit_link",
+}
+
 
 @dataclass(frozen=True)
 class AgentEvent:
     """One atomic observable action or decision by the agent."""
 
-    phase: str
-    action: str
+    event_id: str = field(default_factory=lambda: uuid4().hex)
+    phase: str = ""
+    action: str = ""
+    module: str = ""
+    family: str = ""
+    event_name: str = ""
     detail: str = ""
     task_id: str = ""
     cycle_id: int = 0
+    thread_id: str = ""
+    llm_seq: int = 0
     success: Optional[bool] = None
     reasoning: str = ""
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    data: Dict[str, Any] = field(default_factory=dict)
     timestamp: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+
+    def __post_init__(self) -> None:
+        phase = self.phase or _phase_from_module(self.module)
+        action = self.action or self.event_name
+        module = self.module or _module_from_phase(phase)
+        family = self.family or _family_from_action(action)
+        event_name = self.event_name or action
+
+        object.__setattr__(self, "phase", phase)
+        object.__setattr__(self, "action", action)
+        object.__setattr__(self, "module", module)
+        object.__setattr__(self, "family", family)
+        object.__setattr__(self, "event_name", event_name)
 
 
 # ──────────────────────────────────────────────
@@ -115,7 +186,7 @@ class HumanLogHandler(EventHandler):
 
     def _format(self, e: AgentEvent) -> str:
         ts = _short_time(e.timestamp)
-        phase = PHASE_LABELS.get(e.phase, e.phase.upper().ljust(8))
+        phase = PHASE_LABELS.get(e.phase, e.module.upper().ljust(8))
         icon = _RESULT_ICON.get(e.success, "")
 
         parts = [ts, phase]
@@ -123,7 +194,7 @@ class HumanLogHandler(EventHandler):
         if e.task_id:
             parts.append(f"[{e.task_id[:8]}]")
 
-        parts.append(e.action)
+        parts.append(e.event_name)
 
         if e.detail:
             parts.append(e.detail)
@@ -134,7 +205,7 @@ class HumanLogHandler(EventHandler):
         if e.reasoning:
             parts.append(f"  reason: {e.reasoning[:120]}")
 
-        if e.phase == "cycle" and e.action == "separator":
+        if e.module == "Cycle" and e.event_name == "cycle_separator":
             return f"\n{'━' * 60}"
 
         return " │ ".join(parts)
@@ -184,7 +255,7 @@ class StoreHandler(EventHandler):
         if event.success is not None:
             detail_parts.append(f"[{'ok' if event.success else 'fail'}]")
         detail = " ".join(p for p in detail_parts if p)
-        self._store.add_event(event.task_id, f"{event.phase}.{event.action}", detail)
+        self._store.add_event(event.task_id, f"{event.module}.{event.family}.{event.event_name}", detail)
 
 
 # ──────────────────────────────────────────────
@@ -228,13 +299,13 @@ class ConsoleHandler(EventHandler):
 
     def _format(self, e: AgentEvent) -> str:
         ts = _short_time(e.timestamp)
-        phase = PHASE_LABELS.get(e.phase, e.phase.upper().ljust(8))
+        phase = PHASE_LABELS.get(e.phase, e.module.upper().ljust(8))
         icon = _RESULT_ICON.get(e.success, "")
 
         parts = []
         if e.task_id:
             parts.append(f"[{e.task_id[:8]}]")
-        parts.append(e.action)
+        parts.append(e.event_name)
         if e.detail:
             parts.append(e.detail)
         if icon:
@@ -250,7 +321,7 @@ class ConsoleHandler(EventHandler):
         r = _ANSI["reset"]
         dim = _ANSI["dim"]
 
-        if e.phase == "cycle" and e.action == "separator":
+        if e.module == "Cycle" and e.event_name == "cycle_separator":
             return f"{dim}{'━' * 60}{r}"
 
         return f"{dim}{ts}{r} │ {c}{phase}{r} │ {body}"
@@ -274,194 +345,351 @@ class Observer:
             try:
                 h.handle(event)
             except Exception:
-                logger.debug("Handler %s failed for event %s", type(h).__name__, event.action, exc_info=True)
+                logger.debug("Handler %s failed for event %s", type(h).__name__, event.event_name, exc_info=True)
 
     # ── convenience emitters ──────────────────
 
     def cycle_start(self, cycle_id: int) -> None:
-        self.emit(AgentEvent(phase="cycle", action="separator"))
-        self.emit(AgentEvent(phase="cycle", action="started", detail=f"Cycle #{cycle_id}", cycle_id=cycle_id))
+        self.emit(AgentEvent(module="Cycle", family="lifecycle", event_name="cycle_separator"))
+        self.emit(AgentEvent(
+            module="Cycle", family="lifecycle", event_name="cycle_started",
+            detail=f"Cycle #{cycle_id}", cycle_id=cycle_id,
+        ))
 
     def cycle_end(self, cycle_id: int, discovered: int, executed: int, completed: int, failed: int) -> None:
         self.emit(AgentEvent(
-            phase="cycle", action="completed", cycle_id=cycle_id,
+            module="Cycle", family="lifecycle", event_name="cycle_completed", cycle_id=cycle_id,
             detail=f"+{discovered} discovered │ {executed} executed │ {completed} ok │ {failed} fail",
             success=failed == 0,
+            data={
+                "discovered": discovered,
+                "executed": executed,
+                "completed": completed,
+                "failed": failed,
+            },
         ))
 
     def cycle_paused(self) -> None:
-        self.emit(AgentEvent(phase="cycle", action="paused", detail="directive.paused=true"))
+        self.emit(AgentEvent(module="Cycle", family="lifecycle", event_name="cycle_paused", detail="directive.paused=true"))
 
     def cycle_error(self, cycle_id: int, error: str) -> None:
-        self.emit(AgentEvent(phase="cycle", action="error", cycle_id=cycle_id, detail=error[:300], success=False))
+        self.emit(AgentEvent(
+            module="Cycle", family="lifecycle", event_name="cycle_error",
+            cycle_id=cycle_id, detail=error[:300], success=False,
+        ))
 
     def discover_strategy(self, strategy_name: str, queued: int, reasoning: str = "") -> None:
         self.emit(AgentEvent(
-            phase="discover", action="strategy_selected",
+            module="Discovery", family="strategy", event_name="strategy_selected",
             detail=f"{strategy_name} │ queue={queued}",
             reasoning=reasoning,
+            data={
+                "strategy_name": strategy_name,
+                "queue_depth": queued,
+            },
         ))
 
     def discover_candidates(self, raw_count: int, filtered_count: int, final_count: int) -> None:
         self.emit(AgentEvent(
-            phase="discover", action="candidates",
+            module="Discovery", family="funnel", event_name="candidates_summarized",
             detail=f"{raw_count} raw → {filtered_count} filtered → {final_count} selected",
+            data={
+                "raw_candidates": raw_count,
+                "filtered_candidates": filtered_count,
+                "queued": final_count,
+            },
         ))
 
     def discover_skipped(self, queued: int) -> None:
         self.emit(AgentEvent(
-            phase="discover", action="skipped",
+            module="Discovery", family="strategy", event_name="strategy_skipped",
             detail=f"queue already has {queued} tasks",
             reasoning="Token conservation: skip discovery when queue is not empty",
+            data={
+                "queue_depth": queued,
+                "skipped_reason": "queue_not_empty",
+            },
         ))
 
     def discover_raw_candidates(self, candidates: list[dict]) -> None:
         """Log all raw candidates found during discovery before filtering."""
         for c in candidates:
             self.emit(AgentEvent(
-                phase="discover", action="candidate_found",
+                module="Discovery", family="candidate", event_name="candidate_found",
                 detail=f"[{c.get('source', '?')}] {c.get('title', '?')[:70]}",
                 task_id=c.get("id", ""),
+                data={
+                    "candidate_id": c.get("id", ""),
+                    "source": c.get("source", ""),
+                    "title": c.get("title", ""),
+                    "file_path": c.get("file_path", ""),
+                    "line": c.get("line"),
+                },
             ))
 
     def discover_value_scored(self, task_id: str, title: str, score: float, recommendation: str, dimensions: str) -> None:
         """Log the value assessment result for a single candidate."""
         ok = recommendation == "execute"
         self.emit(AgentEvent(
-            phase="value", action="scored",
+            module="Discovery", family="valuation", event_name="candidate_scored",
             task_id=task_id,
             detail=f"score={score:.3f} rec={recommendation} │ {title[:50]}",
             reasoning=dimensions,
             success=ok,
+            data={
+                "candidate_id": task_id,
+                "score": score,
+                "decision": recommendation,
+                "title": title,
+            },
         ))
 
     def discover_filtered_out(self, task_id: str, title: str, score: float, reason: str) -> None:
         """Log a candidate that was filtered out with the reason."""
         self.emit(AgentEvent(
-            phase="value", action="filtered_out",
+            module="Discovery", family="valuation", event_name="candidate_filtered_out",
             task_id=task_id,
             detail=f"score={score:.3f} │ {title[:50]}",
             reasoning=reason,
             success=False,
+            data={
+                "candidate_id": task_id,
+                "score": score,
+                "title": title,
+                "filtered_reason": reason,
+            },
         ))
 
     def discover_summary(self, raw: int, after_heuristic: int, after_llm: int, final: int) -> None:
         """Log the full discovery funnel in one event."""
         self.emit(AgentEvent(
-            phase="discover", action="funnel",
+            module="Discovery", family="funnel", event_name="funnel_summarized",
             detail=f"raw={raw} → heuristic={after_heuristic} → llm={after_llm} → final={final}",
+            data={
+                "raw_candidates": raw,
+                "after_heuristic": after_heuristic,
+                "after_llm": after_llm,
+                "queued": final,
+            },
         ))
 
     def experience_injected(self, task_id: str, count: int, summaries: str) -> None:
         """Log which past experiences were injected into planning."""
         self.emit(AgentEvent(
-            phase="plan", action="experience_injected",
+            module="Memory", family="recall", event_name="experience_injected",
             task_id=task_id,
             detail=f"{count} experiences",
             reasoning=summaries[:200],
+            data={
+                "injected_count": count,
+                "summary_preview": summaries[:200],
+            },
         ))
 
     def value_assessed(self, task_id: str, title: str, score: float, recommendation: str) -> None:
         ok = recommendation == "execute"
         self.emit(AgentEvent(
-            phase="value", action="assessed", task_id=task_id,
+            task_id=task_id,
+            module="Discovery", family="valuation", event_name="value_assessed",
             detail=f"score={score:.2f} {recommendation} │ {title[:60]}",
             success=ok,
+            data={
+                "candidate_id": task_id,
+                "score": score,
+                "decision": recommendation,
+                "title": title,
+            },
         ))
 
     def task_queued(self, task_id: str, title: str, source: str) -> None:
         self.emit(AgentEvent(
-            phase="discover", action="queued", task_id=task_id,
+            task_id=task_id,
             detail=f"{title[:50]} (source={source})",
+            module="Discovery", family="queue", event_name="candidate_queued",
+            data={
+                "source": source,
+                "title": title,
+            },
         ))
 
     def plan_started(self, task_id: str, title: str) -> None:
-        self.emit(AgentEvent(phase="plan", action="started", task_id=task_id, detail=title[:60]))
+        self.emit(AgentEvent(
+            task_id=task_id,
+            module="Execution", family="planning", event_name="plan_started",
+            detail=title[:60],
+            data={"title": title},
+        ))
 
     def plan_created(self, task_id: str, step_count: int, commit_msg: str) -> None:
         self.emit(AgentEvent(
-            phase="plan", action="created", task_id=task_id,
+            task_id=task_id,
+            module="Execution", family="planning", event_name="plan_created",
             detail=f"{step_count} steps │ {commit_msg[:50]}",
             success=True,
+            data={
+                "step_count": step_count,
+                "commit_message": commit_msg,
+            },
         ))
 
     def replan_triggered(self, task_id: str, round_number: int, trigger: str) -> None:
         self.emit(AgentEvent(
-            phase="plan", action="replan_triggered", task_id=task_id,
+            task_id=task_id,
+            module="Execution", family="planning", event_name="replan_triggered",
             detail=f"round={round_number} trigger={trigger}",
+            data={"round": round_number, "trigger": trigger},
         ))
 
     def replan_created(self, task_id: str, round_number: int, step_count: int) -> None:
         self.emit(AgentEvent(
-            phase="plan", action="replan_created", task_id=task_id,
+            task_id=task_id,
+            module="Execution", family="planning", event_name="replan_created",
             detail=f"round={round_number} steps={step_count}",
             success=True,
+            data={"round": round_number, "step_count": step_count},
         ))
 
     def replan_exhausted(self, task_id: str, total_rounds: int) -> None:
         self.emit(AgentEvent(
-            phase="plan", action="replan_exhausted", task_id=task_id,
+            task_id=task_id,
+            module="Execution", family="planning", event_name="replan_exhausted",
             detail=f"exhausted after {total_rounds} rounds",
             success=False,
+            data={"round": total_rounds},
         ))
 
     def plan_blocked(self, task_id: str, reason: str) -> None:
         self.emit(AgentEvent(
-            phase="plan", action="constitution_blocked", task_id=task_id,
+            task_id=task_id,
+            module="Execution", family="planning", event_name="plan_blocked",
             detail=reason, success=False,
+            data={"blocked_reason": reason},
         ))
 
     def execute_step(self, task_id: str, step_index: int, total: int, action: str, target: str, success: bool, output: str = "") -> None:
+        tool_type = _tool_type_for_action(action)
         self.emit(AgentEvent(
-            phase="execute",
-            action=f"step [{step_index + 1}/{total}]",
+            module="Execution",
+            family="tool_call",
+            event_name="tool_call_succeeded" if success else "tool_call_failed",
             task_id=task_id,
             detail=f"{action} {target}" + (f" │ {output[:80]}" if output and not success else ""),
             success=success,
+            data={
+                "step_id": f"step-{step_index + 1}",
+                "tool_call_id": f"{task_id}-step-{step_index + 1}",
+                "tool_type": tool_type,
+                "tool_name": action,
+                "target": target,
+                "output_summary": output[:80] if output else "",
+                "step_index": step_index + 1,
+                "step_total": total,
+            },
         ))
 
     def execute_finished(self, task_id: str, all_ok: bool) -> None:
         self.emit(AgentEvent(
-            phase="execute", action="finished", task_id=task_id,
+            task_id=task_id,
+            module="Execution", family="state", event_name="execution_completed",
             detail="all steps passed" if all_ok else "one or more steps failed",
             success=all_ok,
+            data={"completion_kind": "success" if all_ok else "failure"},
         ))
 
     def verify_result(self, task_id: str, passed: bool, summary: str) -> None:
         self.emit(AgentEvent(
-            phase="verify", action="completed", task_id=task_id,
+            task_id=task_id,
+            module="Execution", family="verification", event_name="verification_completed",
             detail=summary[:100], success=passed,
+            data={"summary": summary[:100]},
         ))
 
     def git_worktree(self, task_id: str, branch: str, success: bool) -> None:
         self.emit(AgentEvent(
-            phase="git", action="worktree", task_id=task_id,
+            task_id=task_id,
+            module="Execution", family="tool_call",
+            event_name="tool_call_succeeded" if success else "tool_call_failed",
             detail=f"branch={branch}", success=success,
+            data={
+                "tool_type": "git",
+                "tool_name": "git_create_worktree",
+                "branch_name": branch,
+            },
         ))
 
     def git_committed(self, task_id: str, message: str) -> None:
-        self.emit(AgentEvent(phase="git", action="committed", task_id=task_id, detail=message[:60], success=True))
+        self.emit(AgentEvent(
+            task_id=task_id,
+            module="Execution", family="tool_call", event_name="tool_call_succeeded",
+            detail=message[:60], success=True,
+            data={
+                "tool_type": "git",
+                "tool_name": "git_commit",
+                "commit_message": message,
+            },
+        ))
 
     def git_pushed(self, task_id: str) -> None:
-        self.emit(AgentEvent(phase="git", action="pushed", task_id=task_id, success=True))
+        self.emit(AgentEvent(
+            task_id=task_id,
+            module="Execution", family="tool_call", event_name="tool_call_succeeded",
+            success=True,
+            data={
+                "tool_type": "git",
+                "tool_name": "git_push",
+            },
+        ))
 
     def git_pr(self, task_id: str, url: str, success: bool) -> None:
-        self.emit(AgentEvent(phase="git", action="pr_created" if success else "pr_failed", task_id=task_id, detail=url[:120], success=success))
+        self.emit(AgentEvent(
+            task_id=task_id,
+            module="Execution", family="tool_call",
+            event_name="tool_call_succeeded" if success else "tool_call_failed",
+            detail=url[:120], success=success,
+            data={
+                "tool_type": "git",
+                "tool_name": "git_create_pr",
+                "pr_url": url,
+            },
+        ))
 
     def task_completed(self, task_id: str, title: str) -> None:
-        self.emit(AgentEvent(phase="execute", action="task_completed", task_id=task_id, detail=title[:60], success=True))
+        self.emit(AgentEvent(
+            task_id=task_id,
+            module="Execution", family="state", event_name="task_completed",
+            detail=title[:60], success=True,
+            data={"title": title, "to_status": "completed"},
+        ))
 
     def task_failed(self, task_id: str, reason: str) -> None:
-        self.emit(AgentEvent(phase="execute", action="task_failed", task_id=task_id, detail=reason[:120], success=False))
+        self.emit(AgentEvent(
+            task_id=task_id,
+            module="Execution", family="state", event_name="task_failed",
+            detail=reason[:120], success=False,
+            data={"blocked_reason": reason, "to_status": "failed"},
+        ))
 
     def task_needs_human(self, task_id: str, reason: str) -> None:
-        self.emit(AgentEvent(phase="execute", action="task_needs_human", task_id=task_id, detail=reason[:120], success=False))
+        self.emit(AgentEvent(
+            task_id=task_id,
+            module="Execution", family="state", event_name="task_needs_human",
+            detail=reason[:120], success=False,
+            data={"blocked_reason": reason, "to_status": "needs_human"},
+        ))
 
     def decision(self, description: str, reasoning: str, task_id: str = "") -> None:
-        self.emit(AgentEvent(phase="decision", action="made", task_id=task_id, detail=description, reasoning=reasoning))
+        self.emit(AgentEvent(
+            task_id=task_id,
+            module="LLM", family="audit_link", event_name="decision_recorded",
+            detail=description, reasoning=reasoning,
+            data={"description": description},
+        ))
 
     def system_event(self, action: str, detail: str = "", success: Optional[bool] = None) -> None:
-        self.emit(AgentEvent(phase="system", action=action, detail=detail, success=success))
+        self.emit(AgentEvent(
+            module="ControlPlane", family="runtime", event_name=action,
+            detail=detail, success=success,
+        ))
 
     def flush(self) -> None:
         for h in self._handlers:
@@ -505,11 +733,12 @@ class MemoryHandler(EventHandler):
     def handle(self, event: AgentEvent) -> None:
         self.events.append(event)
 
-    def find(self, phase: str = "", action: str = "") -> List[AgentEvent]:
+    def find(self, module: str = "", family: str = "", event_name: str = "") -> List[AgentEvent]:
         return [
             e for e in self.events
-            if (not phase or e.phase == phase)
-            and (not action or e.action == action)
+            if (not module or e.module == module)
+            and (not family or e.family == family)
+            and (not event_name or e.event_name == event_name)
         ]
 
 
@@ -524,6 +753,30 @@ def _short_time(iso_timestamp: str) -> str:
         return dt.strftime("%H:%M:%S")
     except (ValueError, TypeError):
         return time.strftime("%H:%M:%S")
+
+
+def _phase_from_module(module: str) -> str:
+    return MODULE_TO_PHASE.get(module, module.lower())
+
+
+def _module_from_phase(phase: str) -> str:
+    return PHASE_TO_MODULE.get(phase, phase.upper())
+
+
+def _family_from_action(action: str) -> str:
+    if action.startswith("step ["):
+        return "tool_call"
+    return ACTION_TO_FAMILY.get(action, "general")
+
+
+def _tool_type_for_action(action: str) -> str:
+    if action.startswith(("edit_", "create_", "read_", "write_", "delete_", "list_", "search_")):
+        return "filesystem"
+    if action.startswith(("run_", "exec_")) or action in {"pytest", "npm", "make"}:
+        return "command"
+    if action.startswith("git_"):
+        return "git"
+    return "other"
 
 
 def create_default_observer(

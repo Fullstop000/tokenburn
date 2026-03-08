@@ -6,6 +6,9 @@ export type MemoryPanel = 'activity' | 'audit' | 'experience'
 export type ControlPanel = 'models' | 'directive' | 'help' | 'inject'
 
 export interface ActivityEvent {
+  module?: string
+  family?: string
+  event_name?: string
   phase?: string
   action?: string
   detail?: string
@@ -16,6 +19,18 @@ export interface ActivityEvent {
   timestamp?: string
   ts?: string
   success?: boolean
+  data?: Record<string, unknown>
+  task?: {
+    id?: string
+    title?: string
+    status?: string
+    branch_name?: string
+    pr_url?: string
+    execution_trace?: string
+    execution_log?: string
+    error_message?: string
+    updated_at?: string
+  }
   [key: string]: unknown
 }
 
@@ -32,6 +47,23 @@ export interface DiscoverySnapshot {
   scored: ActivityEvent[]
   filteredOut: ActivityEvent[]
   queued: ActivityEvent[]
+}
+
+function normalizeModule(module?: string): string {
+  return String(module ?? '').trim()
+}
+
+export function eventBadgeVariant(event: ActivityEvent): string {
+  const module = normalizeModule(event.module).toLowerCase()
+  return module || 'system'
+}
+
+export function eventBadgeLabel(event: ActivityEvent): string {
+  return normalizeModule(event.module) || 'Unknown'
+}
+
+export function eventDisplayName(event: ActivityEvent): string {
+  return String(event.event_name ?? '')
 }
 
 export function formatTime(iso?: string): string {
@@ -97,15 +129,20 @@ export function groupActivityByTask(
 }
 
 export function buildDiscoverySnapshot(events: ActivityEvent[]): DiscoverySnapshot {
-  const discover = events.filter((ev) => ev.phase === 'discover')
-  const value = events.filter((ev) => ev.phase === 'value')
+  const discover = events.filter((ev) =>
+    ev.module === 'Discovery'
+    && ['strategy', 'candidate', 'queue', 'funnel'].includes(String(ev.family ?? '')),
+  )
+  const value = events.filter((ev) =>
+    ev.module === 'Discovery' && ev.family === 'valuation',
+  )
   return {
-    latestFunnel: [...discover].reverse().find((ev) => ev.action === 'funnel'),
-    strategy: [...discover].reverse().find((ev) => ev.action === 'strategy_selected'),
-    candidates: discover.filter((ev) => ev.action === 'candidate_found').slice(-12).reverse(),
-    scored: value.filter((ev) => ev.action === 'scored').slice(-12).reverse(),
-    filteredOut: value.filter((ev) => ev.action === 'filtered_out').slice(-12).reverse(),
-    queued: discover.filter((ev) => ev.action === 'queued').slice(-12).reverse(),
+    latestFunnel: [...discover].reverse().find((ev) => ev.event_name === 'funnel_summarized'),
+    strategy: [...discover].reverse().find((ev) => ev.event_name === 'strategy_selected'),
+    candidates: discover.filter((ev) => ev.event_name === 'candidate_found').slice(-12).reverse(),
+    scored: value.filter((ev) => ev.event_name === 'candidate_scored').slice(-12).reverse(),
+    filteredOut: value.filter((ev) => ev.event_name === 'candidate_filtered_out').slice(-12).reverse(),
+    queued: discover.filter((ev) => ev.event_name === 'candidate_queued').slice(-12).reverse(),
   }
 }
 

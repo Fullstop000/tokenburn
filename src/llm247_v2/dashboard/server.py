@@ -15,6 +15,7 @@ from urllib.parse import parse_qs, urlparse
 from llm247_v2.core.directive import load_directive, save_directive
 from llm247_v2.core.models import Directive, TaskSourceConfig, TaskStatus
 from llm247_v2.llm.client import probe_registered_model_connection
+from llm247_v2.observability.catalog import decode_discovery_event
 from llm247_v2.storage.model_registry import MODEL_BINDING_SPECS, ModelRegistryStore
 from llm247_v2.storage.experience import ExperienceStore
 from llm247_v2.storage.store import TaskStore
@@ -115,8 +116,8 @@ def serve_dashboard(
                 self._serve_json(_api_bootstrap_status(model_store, bootstrap_status_provider))
             elif path == "/api/activity":
                 limit = int(qs.get("limit", ["200"])[0])
-                phase = qs.get("phase", [""])[0]
-                self._serve_json(_api_activity(_state_dir, limit, phase))
+                module = qs.get("module", [""])[0]
+                self._serve_json(_api_activity(_state_dir, limit, module))
             elif path == "/api/discovery":
                 limit = int(qs.get("limit", ["50"])[0])
                 self._serve_json(_api_discovery(_state_dir, limit))
@@ -575,13 +576,14 @@ def _read_jsonl_tail(path: Path, limit: int) -> list[dict]:
         return []
 
 
-def _api_activity(state_dir: Path, limit: int, phase: str) -> dict:
+def _api_activity(state_dir: Path, limit: int, module: str) -> dict:
     """Read the last N activity events from activity.jsonl."""
     path = state_dir / "activity.jsonl"
-    fetch_limit = limit * 3 if phase else limit
+    fetch_limit = limit * 3 if module else limit
     entries = _read_jsonl_tail(path, fetch_limit)
-    if phase:
-        entries = [e for e in entries if e.get("phase") == phase]
+    entries = [e for e in entries if e.get("module")]
+    if module:
+        entries = [e for e in entries if e.get("module") == module]
     entries = entries[-limit:]
     return {"events": entries, "total_returned": len(entries)}
 
@@ -590,16 +592,16 @@ def _api_discovery(state_dir: Path, limit: int) -> dict:
     """Project recent discovery-related observer events into one dashboard payload."""
     path = state_dir / "activity.jsonl"
     entries = _read_jsonl_tail(path, max(limit * 12, 240))
+    discovery_events = [decoded for decoded in (decode_discovery_event(entry) for entry in entries) if decoded is not None]
 
-    discover_events = [e for e in entries if e.get("phase") == "discover"]
-    value_events = [e for e in entries if e.get("phase") == "value"]
-
-    candidates = [e for e in discover_events if e.get("action") == "candidate_found"][-limit:]
-    queued = [e for e in discover_events if e.get("action") == "queued"][-limit:]
-    scored = [e for e in value_events if e.get("action") == "scored"][-limit:]
-    filtered_out = [e for e in value_events if e.get("action") == "filtered_out"][-limit:]
-    strategy = next((e for e in reversed(discover_events) if e.get("action") == "strategy_selected"), None)
-    funnel = next((e for e in reversed(discover_events) if e.get("action") == "funnel"), None)
+    candidates = [e for e in discovery_events if e.get("event_name") == "candidate_found"][-limit:]
+    queued = [e for e in discovery_events if e.get("event_name") == "candidate_queued"][-limit:]
+    scored = [e for e in discovery_events if e.get("event_name") == "candidate_scored"][-limit:]
+    filtered_out = [e for e in discovery_events if e.get("event_name") == "candidate_filtered_out"][-limit:]
+    strategy = next((e for e in reversed(discovery_events) if e.get("event_name") == "strategy_selected"), None)
+    funnel = next((e for e in reversed(discovery_events) if e.get("event_name") == "funnel_summarized"), None)
+    queued_task_map = _load_task_rows_by_id(state_dir, [e.get("task_id", "") for e in queued])
+    queued = [_attach_discovery_task(entry, queued_task_map) for entry in queued]
 
     return {
         "strategy": strategy,
@@ -615,6 +617,37 @@ def _api_discovery(state_dir: Path, limit: int) -> dict:
             "queued": len(queued),
         },
     }
+
+
+def _load_task_rows_by_id(state_dir: Path, task_ids: list[str]) -> Dict[str, Dict]:
+    valid_ids = [task_id for task_id in task_ids if task_id]
+    if not valid_ids:
+        return {}
+
+    db_path = state_dir / "tasks.db"
+    if not db_path.exists():
+        return {}
+
+    store = TaskStore(db_path)
+    try:
+        task_rows: Dict[str, Dict] = {}
+        for task_id in valid_ids:
+            task = store.get_task(task_id)
+            if task is not None:
+                task_rows[task_id] = _task_full(task)
+        return task_rows
+    finally:
+        store.close()
+
+
+def _attach_discovery_task(entry: dict, task_rows: Dict[str, Dict]) -> dict:
+    task_id = entry.get("task_id", "")
+    if not task_id or task_id not in task_rows:
+        return entry
+
+    enriched = dict(entry)
+    enriched["task"] = task_rows[task_id]
+    return enriched
 
 
 def _api_llm_audit(state_dir: Path, limit: int, seq_after: int) -> dict:
@@ -663,6 +696,8 @@ def _task_row(t) -> Dict:
         "execution_trace": t.execution_trace[:500] if t.execution_trace else "",
         "execution_log": t.execution_log[:500] if t.execution_log else "",
         "error_message": t.error_message,
+        "prompt_token_cost": t.prompt_token_cost,
+        "completion_token_cost": t.completion_token_cost,
         "token_cost": t.token_cost,
         "time_cost_seconds": t.time_cost_seconds,
         "whats_learned": t.whats_learned[:200] if t.whats_learned else "",
@@ -680,6 +715,8 @@ def _task_full(t) -> Dict:
         "execution_trace": t.execution_trace,
         "execution_log": t.execution_log,
         "error_message": t.error_message,
+        "prompt_token_cost": t.prompt_token_cost,
+        "completion_token_cost": t.completion_token_cost,
         "token_cost": t.token_cost,
         "time_cost_seconds": t.time_cost_seconds,
         "whats_learned": t.whats_learned,

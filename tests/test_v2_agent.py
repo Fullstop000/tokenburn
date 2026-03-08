@@ -108,7 +108,7 @@ class TestAutonomousAgentV2(unittest.TestCase):
         save_directive(self.directive_path, directive)
         result = self.agent.run_cycle()
         self.assertEqual(result["status"], "paused")
-        paused_events = self.memory_handler.find(phase="cycle", action="paused")
+        paused_events = self.memory_handler.find(module="Cycle", family="lifecycle", event_name="cycle_paused")
         self.assertEqual(len(paused_events), 1)
 
     def test_discovery_phase_creates_tasks(self):
@@ -125,8 +125,8 @@ class TestAutonomousAgentV2(unittest.TestCase):
 
     def test_observer_receives_cycle_events(self):
         self.agent.run_cycle()
-        starts = self.memory_handler.find(phase="cycle", action="started")
-        ends = self.memory_handler.find(phase="cycle", action="completed")
+        starts = self.memory_handler.find(module="Cycle", family="lifecycle", event_name="cycle_started")
+        ends = self.memory_handler.find(module="Cycle", family="lifecycle", event_name="cycle_completed")
         self.assertEqual(len(starts), 1)
         self.assertEqual(len(ends), 1)
 

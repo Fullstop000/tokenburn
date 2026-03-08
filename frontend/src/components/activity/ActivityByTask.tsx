@@ -1,6 +1,6 @@
 import { PhaseBadge } from '@/components/ui/phase-badge'
 
-import { formatTime, formatActivityMessage, groupActivityByTask, type ActivityEvent } from '../../lib/dashboardView'
+import { eventBadgeLabel, eventBadgeVariant, eventDisplayName, formatTime, formatActivityMessage, groupActivityByTask, type ActivityEvent } from '../../lib/dashboardView'
 import type { TaskSummary } from '../../types/dashboard'
 
 interface ActivityByTaskProps {
@@ -24,19 +24,19 @@ export function ActivityByTask({ activity, collapsedTasks, onToggle, tasks }: Ac
           </div>
           <div className="divide-y divide-border/60">
             {global.map((event, idx) => (
-              <div className="flex items-center gap-3 px-4 py-2 text-sm" key={`global-${idx}`}>
-                <span className="w-20 shrink-0 font-mono text-xs text-muted-foreground">{formatTime(String(event.ts ?? event.timestamp ?? ''))}</span>
-                <PhaseBadge phase={String(event.phase ?? '?')} />
-                <span className="text-foreground">{formatActivityMessage(event)}</span>
-              </div>
-            ))}
+                <div className="flex items-center gap-3 px-4 py-2 text-sm" key={`global-${idx}`}>
+                  <span className="w-20 shrink-0 font-mono text-xs text-muted-foreground">{formatTime(String(event.ts ?? event.timestamp ?? ''))}</span>
+                  <PhaseBadge phase={eventBadgeVariant(event)} label={eventBadgeLabel(event)} />
+                  <span className="text-foreground">{formatActivityMessage(event)}</span>
+                </div>
+              ))}
           </div>
         </div>
       )}
 
       {groups.map((group) => {
         const isCollapsed = collapsedTasks.has(group.taskId)
-        const lastPhase = String(group.events[group.events.length - 1]?.phase ?? '')
+        const lastEvent = group.events[group.events.length - 1]
         return (
           <div className="overflow-hidden rounded-xl border border-border/60 bg-card/60" key={group.taskId}>
             <button
@@ -45,7 +45,10 @@ export function ActivityByTask({ activity, collapsedTasks, onToggle, tasks }: Ac
               type="button"
             >
               <span className={`text-xs text-muted-foreground transition-transform ${isCollapsed ? '-rotate-90' : ''}`}>▾</span>
-              <PhaseBadge phase={lastPhase || 'system'} />
+              <PhaseBadge
+                phase={eventBadgeVariant(lastEvent)}
+                label={eventBadgeLabel(lastEvent)}
+              />
               <span className="truncate font-medium">{group.title}</span>
               <span className="font-mono text-xs text-muted-foreground">{group.taskId.slice(0, 8)}</span>
               <span className="ml-auto rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">{group.events.length}</span>
@@ -60,10 +63,10 @@ export function ActivityByTask({ activity, collapsedTasks, onToggle, tasks }: Ac
                       <span className="w-16 shrink-0 font-mono text-xs text-muted-foreground">
                         {formatTime(String(event.ts ?? event.timestamp ?? ''))}
                       </span>
-                      <PhaseBadge phase={String(event.phase ?? 'system')} />
+                      <PhaseBadge phase={eventBadgeVariant(event)} label={eventBadgeLabel(event)} />
                       <div className="min-w-0 flex-1">
                         <div className="flex flex-wrap items-center gap-2">
-                          <span className="font-mono font-medium">{String(event.action ?? '')}</span>
+                          <span className="font-mono font-medium">{eventDisplayName(event)}</span>
                           <span className="text-muted-foreground">{formatActivityMessage(event)}</span>
                           {success === true && <span className="font-bold text-green-500">✓</span>}
                           {success === false && <span className="font-bold text-destructive">✗</span>}

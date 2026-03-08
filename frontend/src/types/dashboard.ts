@@ -10,6 +10,8 @@ export interface TaskSummary {
   updated_at?: string
   branch_name?: string
   pr_url?: string
+  prompt_token_cost?: number
+  completion_token_cost?: number
   token_cost?: number
   time_cost_seconds?: number
 }
@@ -18,6 +20,7 @@ export interface TaskSummary {
 export interface TaskDetail extends TaskSummary {
   created_at?: string
   plan?: string
+  execution_trace?: string
   execution_log?: string
   verification_result?: string
   error_message?: string
@@ -48,6 +51,8 @@ export interface CycleSummary {
 export interface DashboardStats {
   total_tasks?: number
   total_cycles?: number
+  input_tokens?: number
+  output_tokens?: number
   total_tokens?: number
   status_counts?: Record<string, number>
 }
@@ -168,6 +173,9 @@ export interface ThreadDetail {
 
 /** Recent discovery projection derived from observer activity. */
 export interface DiscoveryEventEntry {
+  module?: string
+  family?: string
+  event_name?: string
   phase?: string
   action?: string
   detail?: string
@@ -176,6 +184,8 @@ export interface DiscoveryEventEntry {
   timestamp?: string
   ts?: string
   success?: boolean
+  data?: Record<string, unknown>
+  task?: Partial<TaskDetail>
   message?: string
   event?: string
   [key: string]: unknown

@@ -68,6 +68,8 @@ class Task:
     execution_log: str = ""
     error_message: str = ""
     cycle_id: int = 0
+    prompt_token_cost: int = 0
+    completion_token_cost: int = 0
     token_cost: int = 0
     time_cost_seconds: float = 0.0
     whats_learned: str = ""

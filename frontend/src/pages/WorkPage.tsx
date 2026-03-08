@@ -64,7 +64,8 @@ export function WorkPage({
                   <TableHead>Status</TableHead>
                   <TableHead>Priority</TableHead>
                   <TableHead>Source</TableHead>
-                  <TableHead className="text-right">Tokens</TableHead>
+                  <TableHead className="text-right">Input</TableHead>
+                  <TableHead className="text-right">Output</TableHead>
                   <TableHead className="text-right">Time</TableHead>
                   <TableHead>PR</TableHead>
                 </TableRow>
@@ -80,7 +81,10 @@ export function WorkPage({
                     <TableCell><PriorityBadge priority={task.priority} /></TableCell>
                     <TableCell><code className="rounded bg-muted px-1.5 py-0.5 text-xs">{task.source}</code></TableCell>
                     <TableCell className="text-right font-mono text-xs text-muted-foreground">
-                      {task.token_cost ? task.token_cost.toLocaleString() : '-'}
+                      {task.prompt_token_cost ? task.prompt_token_cost.toLocaleString() : '-'}
+                    </TableCell>
+                    <TableCell className="text-right font-mono text-xs text-muted-foreground">
+                      {task.completion_token_cost ? task.completion_token_cost.toLocaleString() : '-'}
                     </TableCell>
                     <TableCell className="text-right font-mono text-xs text-muted-foreground">
                       {task.time_cost_seconds ? `${task.time_cost_seconds.toFixed(1)}s` : '-'}
@@ -130,6 +134,9 @@ export function WorkPage({
                   <span>Status: <StatusBadge status={taskDetail.status} /></span>
                   <span>Priority: <PriorityBadge priority={taskDetail.priority} /></span>
                   <span>Source: <code className="rounded bg-muted px-1.5 py-0.5 text-xs">{taskDetail.source}</code></span>
+                  <span>Input Tokens: <span className="font-mono text-xs">{taskDetail.prompt_token_cost?.toLocaleString() ?? '0'}</span></span>
+                  <span>Output Tokens: <span className="font-mono text-xs">{taskDetail.completion_token_cost?.toLocaleString() ?? '0'}</span></span>
+                  <span>Total Tokens: <span className="font-mono text-xs">{taskDetail.token_cost?.toLocaleString() ?? '0'}</span></span>
                   <span>Created: <span className="font-mono text-xs">{formatDateTime(taskDetail.created_at)}</span></span>
                   <span>Updated: <span className="font-mono text-xs">{formatDateTime(taskDetail.updated_at)}</span></span>
                 </div>
