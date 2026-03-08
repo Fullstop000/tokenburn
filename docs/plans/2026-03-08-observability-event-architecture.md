@@ -1,7 +1,8 @@
 # Plan: Observability Event Architecture
 
-> Status: Pending
+> Status: In Progress
 > Created: 2026-03-08
+> PR: https://github.com/Fullstop000/sprout/pull/57
 > Proposal: [docs/proposals/2026-03-08-observability-event-architecture.md](../proposals/2026-03-08-observability-event-architecture.md)
 
 ## Goal
