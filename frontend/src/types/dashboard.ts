@@ -109,6 +109,7 @@ export interface RegisteredModelEntry {
   model_name: string
   api_key_preview: string
   desc: string
+  roocode_wrapper: boolean
   connection_status?: 'success' | 'fail'
   connection_message?: string
   connection_checked_at?: string

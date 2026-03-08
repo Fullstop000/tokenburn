@@ -88,6 +88,7 @@ class RegisteredModel:
     base_url: str = ""
     api_path: str = ""
     desc: str = ""
+    roocode_wrapper: bool = False
     created_at: str = ""
     updated_at: str = ""
 

@@ -50,6 +50,7 @@ interface ControlPageProps {
   modelName: string
   modelApiKey: string
   modelDesc: string
+  modelRoocodeWrapper: boolean
   editingModelId: string
   deletingModelId: string
   injectTitle: string
@@ -71,6 +72,7 @@ interface ControlPageProps {
   setModelName: (value: string) => void
   setModelApiKey: (value: string) => void
   setModelDesc: (value: string) => void
+  setModelRoocodeWrapper: (value: boolean) => void
   setModelBindings: (updater: (current: Record<string, string>) => Record<string, string>) => void
   setInjectTitle: (value: string) => void
   setInjectDescription: (value: string) => void
@@ -94,6 +96,7 @@ export function ControlPage(props: ControlPageProps) {
     modelName,
     modelApiKey,
     modelDesc,
+    modelRoocodeWrapper,
     editingModelId,
     deletingModelId,
     injectTitle,
@@ -115,6 +118,7 @@ export function ControlPage(props: ControlPageProps) {
     setModelName,
     setModelApiKey,
     setModelDesc,
+    setModelRoocodeWrapper,
     setModelBindings,
     setInjectTitle,
     setInjectDescription,
@@ -240,6 +244,19 @@ export function ControlPage(props: ControlPageProps) {
                 <div className="space-y-2">
                   <label className="text-sm font-medium">Description</label>
                   <Textarea onChange={(event) => setModelDesc(event.target.value)} value={modelDesc} />
+                </div>
+                <div className="flex items-center gap-3">
+                  <input
+                    checked={modelRoocodeWrapper}
+                    className="h-4 w-4 cursor-pointer accent-primary"
+                    id="roocode_wrapper"
+                    onChange={(event) => setModelRoocodeWrapper(event.target.checked)}
+                    type="checkbox"
+                  />
+                  <div>
+                    <label className="cursor-pointer text-sm font-medium" htmlFor="roocode_wrapper">Enable Roo Code Wrapper</label>
+                    <p className="text-xs text-muted-foreground">Inject Roo Code identity headers (HTTP-Referer, X-Title, User-Agent) into every request.</p>
+                  </div>
                 </div>
                 <div className="flex justify-end gap-2">
                   <Button type="submit">{isEditingModel ? 'Save Changes' : 'Register Model'}</Button>

@@ -436,6 +436,7 @@ def _api_register_model(model_store: Optional[ModelRegistryStore], body: dict) -
             model_name=str(body.get("model_name", "")),
             api_key=str(body.get("api_key", "")),
             desc=str(body.get("desc", "")),
+            roocode_wrapper=bool(body.get("roocode_wrapper", False)),
         )
     except ValueError as exc:
         return {"error": str(exc)}
@@ -455,6 +456,7 @@ def _api_update_model(model_store: Optional[ModelRegistryStore], model_id: str, 
             model_name=str(body.get("model_name", "")),
             api_key=str(body.get("api_key", "")),
             desc=str(body.get("desc", "")),
+            roocode_wrapper=bool(body.get("roocode_wrapper", False)),
         )
     except ValueError as exc:
         return {"error": str(exc)}
@@ -751,6 +753,7 @@ def _registered_model_row(model, connection_status: Optional[dict[str, str]] = N
         "model_name": model.model_name,
         "api_key_preview": _mask_api_key(model.api_key),
         "desc": model.desc,
+        "roocode_wrapper": model.roocode_wrapper,
         "created_at": model.created_at,
         "updated_at": model.updated_at,
     }

@@ -41,6 +41,7 @@ CREATE INDEX IF NOT EXISTS idx_registered_models_type ON registered_models(model
 _MIGRATIONS = [
     "ALTER TABLE registered_models ADD COLUMN desc TEXT DEFAULT ''",
     "ALTER TABLE registered_models ADD COLUMN api_path TEXT DEFAULT ''",
+    "ALTER TABLE registered_models ADD COLUMN roocode_wrapper INTEGER DEFAULT 0",
 ]
 
 
@@ -104,7 +105,8 @@ def _normalize_model_fields(
     model_name: str,
     api_key: str,
     desc: str = "",
-) -> tuple[str, str, str, str, str, str]:
+    roocode_wrapper: bool = False,
+) -> tuple[str, str, str, str, str, str, bool]:
     """Validate one model payload and return normalized persistence fields."""
     clean_type = str(model_type).strip().lower()
     if clean_type not in {item.value for item in ModelType}:
@@ -128,7 +130,7 @@ def _normalize_model_fields(
     if clean_type == ModelType.EMBEDDING.value:
         clean_base_url = ""
 
-    return clean_type, clean_base_url, clean_api_path, clean_model_name, clean_api_key, clean_desc
+    return clean_type, clean_base_url, clean_api_path, clean_model_name, clean_api_key, clean_desc, bool(roocode_wrapper)
 
 
 def _row_to_registered_model(row: sqlite3.Row) -> RegisteredModel:
@@ -147,6 +149,7 @@ def _row_to_registered_model(row: sqlite3.Row) -> RegisteredModel:
         model_name=data["model_name"],
         api_key=data["api_key"],
         desc=data.get("desc", "") or "",
+        roocode_wrapper=bool(data.get("roocode_wrapper", 0)),
         created_at=data["created_at"],
         updated_at=data["updated_at"],
     )
@@ -193,15 +196,17 @@ class ModelRegistryStore:
         model_name: str,
         api_key: str,
         desc: str = "",
+        roocode_wrapper: bool = False,
     ) -> RegisteredModel:
         """Persist one registered model and return the stored record."""
-        clean_type, clean_base_url, clean_api_path, clean_model_name, clean_api_key, clean_desc = _normalize_model_fields(
+        clean_type, clean_base_url, clean_api_path, clean_model_name, clean_api_key, clean_desc, clean_roocode_wrapper = _normalize_model_fields(
             model_type=model_type,
             base_url=base_url,
             api_path=api_path,
             model_name=model_name,
             api_key=api_key,
             desc=desc,
+            roocode_wrapper=roocode_wrapper,
         )
 
         now = _now_iso()
@@ -215,14 +220,15 @@ class ModelRegistryStore:
             base_url=clean_base_url,
             api_path=clean_api_path,
             desc=clean_desc,
+            roocode_wrapper=clean_roocode_wrapper,
             created_at=now,
             updated_at=now,
         )
         with self._lock:
             self._conn.execute(
                 """INSERT INTO registered_models
-                   (id, model_type, base_url, api_path, model_name, api_key, desc, created_at, updated_at)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                   (id, model_type, base_url, api_path, model_name, api_key, desc, roocode_wrapper, created_at, updated_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (
                     record.id,
                     record.model_type,
@@ -231,6 +237,7 @@ class ModelRegistryStore:
                     record.model_name,
                     record.api_key,
                     record.desc,
+                    int(record.roocode_wrapper),
                     record.created_at,
                     record.updated_at,
                 ),
@@ -248,6 +255,7 @@ class ModelRegistryStore:
         model_name: str,
         api_key: str,
         desc: str = "",
+        roocode_wrapper: bool = False,
     ) -> RegisteredModel:
         """Update one registered model and return the latest stored record."""
         clean_model_id = str(model_id).strip()
@@ -264,13 +272,14 @@ class ModelRegistryStore:
 
             existing = _row_to_registered_model(row)
             next_api_key = str(api_key).strip() or existing.api_key
-            clean_type, clean_base_url, clean_api_path, clean_model_name, clean_api_key, clean_desc = _normalize_model_fields(
+            clean_type, clean_base_url, clean_api_path, clean_model_name, clean_api_key, clean_desc, clean_roocode_wrapper = _normalize_model_fields(
                 model_type=model_type,
                 base_url=base_url,
                 api_path=api_path,
                 model_name=model_name,
                 api_key=next_api_key,
                 desc=desc,
+                roocode_wrapper=roocode_wrapper,
             )
 
             binding_rows = self._conn.execute(
@@ -288,7 +297,7 @@ class ModelRegistryStore:
             updated_at = _now_iso()
             self._conn.execute(
                 """UPDATE registered_models
-                   SET model_type=?, base_url=?, api_path=?, model_name=?, api_key=?, desc=?, updated_at=?
+                   SET model_type=?, base_url=?, api_path=?, model_name=?, api_key=?, desc=?, roocode_wrapper=?, updated_at=?
                    WHERE id=?""",
                 (
                     clean_type,
@@ -297,6 +306,7 @@ class ModelRegistryStore:
                     clean_model_name,
                     clean_api_key,
                     clean_desc,
+                    int(clean_roocode_wrapper),
                     updated_at,
                     clean_model_id,
                 ),
@@ -311,6 +321,7 @@ class ModelRegistryStore:
                 base_url=clean_base_url,
                 api_path=clean_api_path,
                 desc=clean_desc,
+                roocode_wrapper=clean_roocode_wrapper,
                 created_at=existing.created_at,
                 updated_at=updated_at,
             )

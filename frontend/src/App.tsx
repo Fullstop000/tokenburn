@@ -84,6 +84,7 @@ function App() {
   const [modelName, setModelName] = useState('')
   const [modelApiKey, setModelApiKey] = useState('')
   const [modelDesc, setModelDesc] = useState('')
+  const [modelRoocodeWrapper, setModelRoocodeWrapper] = useState(false)
   const [editingModelId, setEditingModelId] = useState('')
   const [deletingModelId, setDeletingModelId] = useState('')
 
@@ -322,6 +323,7 @@ function App() {
     setModelName('')
     setModelApiKey('')
     setModelDesc('')
+    setModelRoocodeWrapper(false)
   }, [])
 
   const startEditingModel = useCallback((model: RegisteredModelEntry): void => {
@@ -332,6 +334,7 @@ function App() {
     setModelName(model.model_name)
     setModelApiKey('')
     setModelDesc(model.desc ?? '')
+    setModelRoocodeWrapper(model.roocode_wrapper ?? false)
     setControlPanel('models')
     setActivePage('control')
   }, [])
@@ -427,6 +430,7 @@ function App() {
         model_name: trimmedModelName,
         api_key: apiKey,
         desc: modelDesc.trim(),
+        roocode_wrapper: modelRoocodeWrapper,
       }
       const payload = editingModelId
         ? await dashboardApiClient.updateModel(editingModelId, modelPayload)
@@ -647,6 +651,7 @@ function App() {
         modelBindings={modelBindings}
         modelDesc={modelDesc}
         modelName={modelName}
+        modelRoocodeWrapper={modelRoocodeWrapper}
         modelType={modelType}
         onChangePanel={setControlPanel}
         onDeleteModel={(model) => void deleteModel(model)}
@@ -668,6 +673,7 @@ function App() {
         setModelBindings={(updater) => setModelBindings((current) => updater(current))}
         setModelDesc={setModelDesc}
         setModelName={setModelName}
+        setModelRoocodeWrapper={setModelRoocodeWrapper}
         setModelType={setModelType}
         setSourcesJson={setSourcesJson}
         sourcesJson={sourcesJson}

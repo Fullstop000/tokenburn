@@ -12,7 +12,7 @@ from llm247_v2.execution.tools import LoopState, ToolRegistry, build_registry
 from llm247_v2.execution.tools.control import FINISH_SIGNAL
 from llm247_v2.llm.client import BudgetExhaustedError, LLMClient
 from llm247_v2.llm.prompts import render
-from llm247_v2.observability.observer import Observer
+from llm247_v2.observability.observer import AgentEvent, Observer
 
 logger = logging.getLogger("llm247_v2.execution.loop")
 
@@ -43,11 +43,11 @@ class ReActLoop:
         workspace: Path,
         directive: Directive,
         experience_context: str = "",
-    ) -> tuple[bool, list[ToolResult]]:
+    ) -> tuple[bool, list[ToolResult], str]:
         """Run the ReAct loop for one task.
 
-        Returns (success, trace) where trace is the ordered list of
-        ToolResults from every tool call made during execution.
+        Returns (success, trace, failure_reason) where failure_reason is
+        empty on success and contains the specific error on failure.
         """
         from llm247_v2.execution.git_ops import GitWorkflow
         from llm247_v2.execution.safety import SafetyPolicy
@@ -81,7 +81,7 @@ class ReActLoop:
         for step in range(directive.max_steps):
             if self._shutdown.is_set():
                 logger.info("ReActLoop interrupted by shutdown at step %d", step)
-                return False, trace
+                return False, trace, "interrupted by shutdown"
 
             # ── LLM call ────────────────────────────────────────────────────
             try:
@@ -89,8 +89,13 @@ class ReActLoop:
             except BudgetExhaustedError:
                 raise
             except Exception as exc:
-                logger.warning("LLM call failed at step %d: %s", step, exc)
-                return False, trace
+                reason = f"LLM call failed at step {step}: {exc}"
+                logger.warning(reason)
+                self.obs.emit(AgentEvent(
+                    phase="execute", action="llm_error",
+                    task_id=task.id, detail=str(exc), success=False,
+                ))
+                return False, trace, reason
 
             if not tool_calls:
                 # LLM returned text instead of a tool call — nudge it
@@ -149,13 +154,18 @@ class ReActLoop:
                 if result.success and result.output.startswith(FINISH_SIGNAL):
                     messages.append(assistant_turn)
                     messages.extend(tool_result_turns)
-                    return True, trace
+                    return True, trace, ""
 
             messages.append(assistant_turn)
             messages.extend(tool_result_turns)
 
-        logger.warning("ReActLoop exhausted max_steps=%d for task %s", directive.max_steps, task.id)
-        return False, trace
+        reason = f"exhausted max_steps={directive.max_steps} without calling finish()"
+        logger.warning("ReActLoop %s for task %s", reason, task.id)
+        self.obs.emit(AgentEvent(
+            phase="execute", action="loop_exhausted",
+            task_id=task.id, detail=reason, success=False,
+        ))
+        return False, trace, reason
 
 
 def serialize_trace(trace: list[ToolResult]) -> str:

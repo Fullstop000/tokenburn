@@ -227,7 +227,7 @@ class AutonomousAgentV2:
         task.status = TaskStatus.EXECUTING.value
         self.store.update_task(task)
 
-        success, trace = loop.run(
+        success, trace, failure_reason = loop.run(
             task=task,
             workspace=self.workspace,
             directive=directive,
@@ -238,7 +238,7 @@ class AutonomousAgentV2:
         task.execution_log = format_execution_log(trace)
         task.status = TaskStatus.COMPLETED.value if success else TaskStatus.NEEDS_HUMAN.value
         if not success:
-            task.error_message = "ReActLoop ended without finish() — check execution trace"
+            task.error_message = failure_reason or "ReActLoop ended without finish() — check execution trace"
             task.human_help_request = (
                 f"Task '{task.title}' did not complete. "
                 "Review the execution trace in the task detail view and resolve the blocking issue."

@@ -150,6 +150,7 @@ export class DashboardApiClient {
     model_name: string
     api_key: string
     desc: string
+    roocode_wrapper: boolean
   }): Promise<{ status?: string; model?: Record<string, unknown>; error?: string }> {
     return this.requestJson('/api/models', {
       method: 'POST',
@@ -166,6 +167,7 @@ export class DashboardApiClient {
     model_name: string
     api_key: string
     desc: string
+    roocode_wrapper: boolean
   }): Promise<{ status?: string; model?: Record<string, unknown>; error?: string }> {
     return this.requestJson(`/api/models/${encodeURIComponent(modelId)}`, {
       method: 'PUT',
