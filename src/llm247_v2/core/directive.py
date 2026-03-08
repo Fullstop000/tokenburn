@@ -3,6 +3,9 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from dacite import Config, from_dict
+from dacite.exceptions import DaciteError
+
 from llm247_v2.core.models import Directive, TaskSourceConfig
 
 
@@ -33,26 +36,19 @@ def load_directive(path: Path) -> Directive:
         if not isinstance(data, dict):
             return default_directive()
 
-        sources: dict[str, TaskSourceConfig] = {}
-        for key, val in data.get("task_sources", {}).items():
-            if isinstance(val, dict):
-                sources[key] = TaskSourceConfig(
-                    enabled=bool(val.get("enabled", True)),
-                    priority=int(val.get("priority", 3)),
-                )
+        # Handle legacy field name mapping (max_replan_rounds -> max_steps)
+        if "max_replan_rounds" in data and "max_steps" not in data:
+            data["max_steps"] = data.pop("max_replan_rounds")
 
-        return Directive(
-            paused=bool(data.get("paused", False)),
-            focus_areas=data.get("focus_areas", []),
-            forbidden_paths=data.get("forbidden_paths", [".env", ".git"]),
-            max_file_changes_per_task=int(data.get("max_file_changes_per_task", 10)),
-            custom_instructions=str(data.get("custom_instructions", "")),
-            task_sources=sources or default_directive().task_sources,
-            poll_interval_seconds=int(data.get("poll_interval_seconds", 120)),
-            max_steps=int(data.get("max_steps", data.get("max_replan_rounds", 50))),
-            max_tokens_per_task=int(data.get("max_tokens_per_task", 0)),
+        # Deserialize using dacite with strict=False to ignore unknown fields
+        config = Config(
+            strict=False,  # Ignore unknown fields
+            type_hooks={
+                # dacite handles basic type coercion automatically
+            },
         )
-    except (json.JSONDecodeError, OSError, ValueError):
+        return from_dict(Directive, data, config=config)
+    except (json.JSONDecodeError, OSError, ValueError, TypeError, DaciteError):
         return default_directive()
 
 

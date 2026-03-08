@@ -64,6 +64,43 @@ class TestDirective(unittest.TestCase):
         self.assertIn("Focus on unit tests", text)
         self.assertIn(".env", text)
 
+    def test_load_unknown_fields_dropped(self):
+        """Unknown fields should be silently dropped without error."""
+        data = {
+            "paused": True,
+            "focus_areas": ["security"],
+            "unknown_field": "should be ignored",
+            "nested_unknown": {"key": "value"},
+        }
+        self.path.write_text(json.dumps(data), encoding="utf-8")
+        d = load_directive(self.path)
+        self.assertTrue(d.paused)
+        self.assertEqual(d.focus_areas, ["security"])
+        # Should not have unknown fields
+        self.assertFalse(hasattr(d, "unknown_field"))
+
+    def test_load_malformed_integer_returns_default(self):
+        """Malformed integer strings should return default directive."""
+        data = {
+            "paused": False,
+            "max_file_changes_per_task": "not_a_number",
+        }
+        self.path.write_text(json.dumps(data), encoding="utf-8")
+        d = load_directive(self.path)
+        # Should return default on type error
+        self.assertFalse(d.paused)
+        self.assertEqual(d.max_file_changes_per_task, 10)  # default value
+
+    def test_load_legacy_max_replan_rounds_mapping(self):
+        """Legacy max_replan_rounds field should be mapped to max_steps."""
+        data = {
+            "paused": False,
+            "max_replan_rounds": 100,
+        }
+        self.path.write_text(json.dumps(data), encoding="utf-8")
+        d = load_directive(self.path)
+        self.assertEqual(d.max_steps, 100)
+
 
 if __name__ == "__main__":
     unittest.main()
