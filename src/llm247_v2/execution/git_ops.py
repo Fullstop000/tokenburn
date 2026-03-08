@@ -120,12 +120,14 @@ class GitWorkflow:
         body: str,
         base: Optional[str] = None,
         worktree_path: Optional[Path] = None,
+        task_id: str = "",
+        task_title: str = "",
     ) -> Tuple[bool, str]:
         """Create a GitHub PR using gh CLI."""
         base_branch = base or self._get_main_branch()
         cwd = worktree_path or self.workspace
         merge_message = self._ensure_self_exec_merge_message(title)
-        pr_body = self._ensure_self_exec_pr_body(body)
+        pr_body = self._ensure_self_exec_pr_body(body, task_id=task_id, task_title=task_title)
 
         try:
             output = self._run_in(cwd, [
@@ -262,19 +264,29 @@ class GitWorkflow:
             return normalized
         return f"{SELF_EXEC_PREFIX} {normalized}"
 
-    def _ensure_self_exec_pr_body(self, body: str) -> str:
+    def _ensure_self_exec_pr_body(self, body: str, *, task_id: str = "", task_title: str = "") -> str:
         """Prefix PR body to make autonomous execution explicit in PR content."""
         normalized = (body or "").strip()
         prefix_line = f"{SELF_EXEC_PREFIX} This change was self-executed by Sprout agent."
+        metadata_lines: list[str] = []
+        if task_id:
+            metadata_lines.append(f"Task ID: `{task_id}`")
+        if task_title:
+            metadata_lines.append(f"Task Title: {task_title}")
+        metadata_block = "\n".join(metadata_lines).strip()
+        required_prefix = prefix_line if not metadata_block else f"{prefix_line}\n\n{metadata_block}"
 
         if not normalized:
-            return prefix_line
+            return required_prefix
 
         first_line = normalized.splitlines()[0].strip()
         if self._has_self_exec_prefix(first_line):
+            if metadata_block and metadata_block not in normalized:
+                remainder = "\n".join(normalized.splitlines()[1:]).strip()
+                return f"{required_prefix}\n\n{remainder}" if remainder else required_prefix
             return normalized
 
-        return f"{prefix_line}\n\n{normalized}"
+        return f"{required_prefix}\n\n{normalized}"
 
     def _has_self_exec_prefix(self, text: str) -> bool:
         """Check whether text already starts with the self-exec prefix."""

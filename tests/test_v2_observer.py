@@ -330,6 +330,25 @@ class TestObserver(unittest.TestCase):
         self.assertEqual(h.events[0].module, "LLM")
         self.assertIn("Recently explored", h.events[0].reasoning)
 
+    def test_llm_tool_selection_event(self):
+        h = MemoryHandler()
+        obs = Observer(handlers=[h])
+        obs.llm_tool_selection(
+            task_id="t1",
+            model="kimi-for-coding",
+            tool_names=["read_file", "run_command"],
+            prompt_tokens=120,
+            completion_tokens=45,
+            total_tokens=165,
+        )
+        self.assertEqual(len(h.events), 1)
+        event = h.events[0]
+        self.assertEqual(event.module, "LLM")
+        self.assertEqual(event.family, "tool_selection")
+        self.assertEqual(event.event_name, "tool_selection_recorded")
+        self.assertEqual(event.data["tool_names"], ["read_file", "run_command"])
+        self.assertEqual(event.data["prompt_tokens"], 120)
+
     def test_value_assessed(self):
         h = MemoryHandler()
         obs = Observer(handlers=[h])

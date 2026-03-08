@@ -13,6 +13,7 @@
 
 | Status | Proposal | Scope | Next Step |
 |--------|----------|-------|-----------|
+| `Approved for Plan` | [2026-03-09-realtime-execution-telemetry-and-task-pr-linkage.md](2026-03-09-realtime-execution-telemetry-and-task-pr-linkage.md) | Restore realtime execution telemetry in the dashboard and create stable task/PR backlinks | Execute the linked plan in [docs/plans/2026-03-09-realtime-execution-telemetry-and-task-pr-linkage.md](../plans/2026-03-09-realtime-execution-telemetry-and-task-pr-linkage.md) |
 | `Approved for Plan` | [2026-03-09-startup-api-key-import.md](2026-03-09-startup-api-key-import.md) | Import one `api_key.yaml` file into the V2 model registry during startup | Execute the linked plan in [docs/plans/2026-03-09-startup-api-key-import.md](../plans/2026-03-09-startup-api-key-import.md) |
 | `Approved for Plan` | [2026-03-08-dashboard-review-briefing.md](2026-03-08-dashboard-review-briefing.md) | Reposition the dashboard around async review briefings, explained changes, and clearer drill-down paths | Approve and execute the linked plan in [docs/plans/2026-03-08-dashboard-review-briefing.md](../plans/2026-03-08-dashboard-review-briefing.md) |
 | `Approved for Plan` | [2026-03-08-observability-event-architecture.md](2026-03-08-observability-event-architecture.md) | Restructure observability around structured module event catalogs, correlations, and projections | PR #57 is in progress; merge it, complete the plan, and then update `docs/design/observability.md` |

@@ -19,9 +19,15 @@ class LoopState:
     directive: Directive
     git: GitWorkflow
     task_id: str
+    task_title: str = ""
     worktree_path: Path | None = None
     branch_name: str = ""
     pr_url: str = ""
+    on_state_change: Callable[["LoopState"], None] | None = None
+
+    def notify_state_change(self) -> None:
+        if self.on_state_change is not None:
+            self.on_state_change(self)
 
 
 ToolHandler = Callable[[dict, LoopState], ToolResult]

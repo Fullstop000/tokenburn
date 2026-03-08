@@ -227,15 +227,23 @@ class AutonomousAgentV2:
         task.status = TaskStatus.EXECUTING.value
         self.store.update_task(task)
 
-        success, trace, failure_reason = loop.run(
+        def persist_loop_links(loop_state) -> None:
+            task.branch_name = loop_state.branch_name
+            task.pr_url = loop_state.pr_url
+            self.store.update_task(task)
+
+        success, trace, failure_reason, loop_state = loop.run(
             task=task,
             workspace=self.workspace,
             directive=directive,
             experience_context=experience_context,
+            on_state_change=persist_loop_links,
         )
 
         task.execution_trace = serialize_trace(trace)
         task.execution_log = format_execution_log(trace)
+        task.branch_name = loop_state.branch_name
+        task.pr_url = loop_state.pr_url
         task.status = TaskStatus.COMPLETED.value if success else TaskStatus.NEEDS_HUMAN.value
         if not success:
             task.error_message = failure_reason or "ReActLoop ended without finish() — check execution trace"

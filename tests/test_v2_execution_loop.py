@@ -45,7 +45,8 @@ class TestReActLoopReasoningReplay(unittest.TestCase):
             workspace = Path(tmp.name)
             shutdown_event = MagicMock()
             shutdown_event.is_set.return_value = False
-            observer = Observer(handlers=[MemoryHandler()])
+            memory = MemoryHandler()
+            observer = Observer(handlers=[memory])
             constitution = load_constitution(workspace / "constitution.md")
             llm = _LLMStub()
             loop = ReActLoop(llm=llm, constitution=constitution, observer=observer, shutdown_event=shutdown_event)
@@ -53,7 +54,7 @@ class TestReActLoopReasoningReplay(unittest.TestCase):
             directive = Directive(max_steps=3)
 
             with patch("llm247_v2.execution.loop.build_registry", return_value=_RegistryStub()):
-                success, trace, reason = loop.run(task, workspace, directive)
+                success, trace, reason, _state = loop.run(task, workspace, directive)
 
             self.assertTrue(success)
             self.assertEqual(reason, "")
@@ -63,6 +64,9 @@ class TestReActLoopReasoningReplay(unittest.TestCase):
             self.assertEqual(assistant_turn["role"], "assistant")
             self.assertEqual(assistant_turn["reasoning_content"], "Inspect the repository first.")
             self.assertEqual(assistant_turn["tool_calls"][0]["function"]["name"], "read_file")
+            llm_events = memory.find(module="LLM", family="tool_selection", event_name="tool_selection_recorded")
+            self.assertEqual(len(llm_events), 2)
+            self.assertEqual(llm_events[0].data["tool_names"], ["read_file"])
         finally:
             tmp.cleanup()
 

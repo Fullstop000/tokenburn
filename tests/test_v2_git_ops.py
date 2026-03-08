@@ -145,6 +145,33 @@ class TestGitWorkflow(unittest.TestCase):
         self.assertEqual(title, "[self-exec] Fix bug")
         self.assertTrue(body.startswith("[self-exec] This change was self-executed by Sprout agent."))
 
+    @patch("llm247_v2.execution.git_ops.subprocess.run")
+    def test_create_pr_includes_task_backlink_metadata(self, mock_run):
+        captured_gh_cmd = {}
+
+        def side_effect(cmd, **kwargs):
+            if cmd[0] == "gh":
+                captured_gh_cmd["cmd"] = cmd
+                return MagicMock(
+                    returncode=0,
+                    stdout="https://github.com/org/repo/pull/43\n",
+                    stderr="",
+                )
+            return MagicMock(returncode=0, stdout="main\n", stderr="")
+
+        mock_run.side_effect = side_effect
+        ok, _output = self.git.create_pr(
+            "Fix bug",
+            "## Summary\nFixed it",
+            worktree_path=self.workspace,
+            task_id="task-1234abcd",
+            task_title="Fix dashboard polling",
+        )
+        self.assertTrue(ok)
+        body = captured_gh_cmd["cmd"][captured_gh_cmd["cmd"].index("--body") + 1]
+        self.assertIn("Task ID: `task-1234abcd`", body)
+        self.assertIn("Task Title: Fix dashboard polling", body)
+
     def test_merge_message_prefix_is_idempotent(self):
         message = self.git._ensure_self_exec_merge_message("[self-exec] Keep prefix")
         self.assertEqual(message, "[self-exec] Keep prefix")

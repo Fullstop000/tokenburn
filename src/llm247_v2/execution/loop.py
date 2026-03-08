@@ -43,10 +43,11 @@ class ReActLoop:
         workspace: Path,
         directive: Directive,
         experience_context: str = "",
-    ) -> tuple[bool, list[ToolResult], str]:
+        on_state_change=None,
+    ) -> tuple[bool, list[ToolResult], str, LoopState]:
         """Run the ReAct loop for one task.
 
-        Returns (success, trace, failure_reason) where failure_reason is
+        Returns (success, trace, failure_reason, state) where failure_reason is
         empty on success and contains the specific error on failure.
         """
         from llm247_v2.execution.git_ops import GitWorkflow
@@ -59,6 +60,8 @@ class ReActLoop:
             directive=directive,
             git=GitWorkflow(workspace),
             task_id=task.id,
+            task_title=task.title,
+            on_state_change=on_state_change,
         )
         registry = build_registry(state)
 
@@ -81,7 +84,7 @@ class ReActLoop:
         for step in range(directive.max_steps):
             if self._shutdown.is_set():
                 logger.info("ReActLoop interrupted by shutdown at step %d", step)
-                return False, trace, "interrupted by shutdown"
+                return False, trace, "interrupted by shutdown", state
 
             # ── LLM call ────────────────────────────────────────────────────
             try:
@@ -95,7 +98,7 @@ class ReActLoop:
                     phase="execute", action="llm_error",
                     task_id=task.id, detail=str(exc), success=False,
                 ))
-                return False, trace, reason
+                return False, trace, reason, state
 
             if not tool_calls:
                 # LLM returned text instead of a tool call — nudge it
@@ -105,6 +108,15 @@ class ReActLoop:
                     "content": "Please call one of the available tools to continue.",
                 })
                 continue
+
+            self.obs.llm_tool_selection(
+                task_id=task.id,
+                model=str(getattr(self.llm, "_model", getattr(self.llm, "model_name", "")) or ""),
+                tool_names=[tool_call.tool for tool_call in tool_calls],
+                prompt_tokens=_usage.prompt_tokens,
+                completion_tokens=_usage.completion_tokens,
+                total_tokens=_usage.total_tokens,
+            )
 
             # ── Execute each tool call ───────────────────────────────────────
             # (OpenAI may return multiple tool calls in one turn)
@@ -159,7 +171,7 @@ class ReActLoop:
                         assistant_turn["reasoning_content"] = assistant_reasoning
                     messages.append(assistant_turn)
                     messages.extend(tool_result_turns)
-                    return True, trace, ""
+                    return True, trace, "", state
 
             if assistant_reasoning:
                 assistant_turn["reasoning_content"] = assistant_reasoning
@@ -172,7 +184,7 @@ class ReActLoop:
             phase="execute", action="loop_exhausted",
             task_id=task.id, detail=reason, success=False,
         ))
-        return False, trace, reason
+        return False, trace, reason, state
 
 
 def serialize_trace(trace: list[ToolResult]) -> str:

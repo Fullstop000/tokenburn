@@ -5,6 +5,9 @@ from unittest.mock import MagicMock, patch
 
 from llm247_v2.agent import AutonomousAgentV2, run_agent_loop
 from llm247_v2.core.directive import save_directive
+from llm247_v2.execution.git_ops import GitWorkflow
+from llm247_v2.execution.safety import SafetyPolicy
+from llm247_v2.execution.tools import LoopState
 from llm247_v2.llm.client import BudgetExhaustedError
 from llm247_v2.core.models import Directive, ModelBindingPoint, Task, TaskSourceConfig, TaskStatus
 from llm247_v2.observability.observer import MemoryHandler, Observer
@@ -144,12 +147,26 @@ class TestAutonomousAgentV2(unittest.TestCase):
         from llm247_v2.core.constitution import load_constitution
         constitution = load_constitution(self.constitution_path)
 
-        with patch("llm247_v2.execution.loop.ReActLoop.run", return_value=(True, [])):
+        loop_state = LoopState(
+            root_workspace=self.workspace,
+            active_workspace=self.workspace,
+            safety=SafetyPolicy(),
+            directive=directive,
+            git=GitWorkflow(self.workspace),
+            task_id=task.id,
+            branch_name="agent/task-pr-link",
+            pr_url="https://github.com/org/repo/pull/42",
+            task_title=task.title,
+        )
+
+        with patch("llm247_v2.execution.loop.ReActLoop.run", return_value=(True, [], "", loop_state)):
             success = self.agent._execute_single_task(task, directive, constitution)
 
         self.assertTrue(success)
         updated = self.store.get_task(task.id)
         self.assertEqual(updated.status, TaskStatus.COMPLETED.value)
+        self.assertEqual(updated.pr_url, "https://github.com/org/repo/pull/42")
+        self.assertEqual(updated.branch_name, "agent/task-pr-link")
 
     def test_execution_failure_sets_needs_human(self):
         task = Task(
@@ -165,7 +182,17 @@ class TestAutonomousAgentV2(unittest.TestCase):
         from llm247_v2.core.constitution import load_constitution
         constitution = load_constitution(self.constitution_path)
 
-        with patch("llm247_v2.execution.loop.ReActLoop.run", return_value=(False, [])):
+        loop_state = LoopState(
+            root_workspace=self.workspace,
+            active_workspace=self.workspace,
+            safety=SafetyPolicy(),
+            directive=directive,
+            git=GitWorkflow(self.workspace),
+            task_id=task.id,
+            task_title=task.title,
+        )
+
+        with patch("llm247_v2.execution.loop.ReActLoop.run", return_value=(False, [], "failed", loop_state)):
             success = self.agent._execute_single_task(task, directive, constitution)
 
         self.assertFalse(success)
@@ -191,9 +218,19 @@ class TestAutonomousAgentV2(unittest.TestCase):
 
         captured = {}
 
-        def capture_run(self_loop, task, workspace, directive, experience_context=""):
+        def capture_run(self_loop, task, workspace, directive, experience_context="", on_state_change=None):
             captured["llm"] = self_loop.llm
-            return True, []
+            state = LoopState(
+                root_workspace=workspace,
+                active_workspace=workspace,
+                safety=SafetyPolicy(),
+                directive=directive,
+                git=GitWorkflow(workspace),
+                task_id=task.id,
+                task_title=task.title,
+                on_state_change=on_state_change,
+            )
+            return True, [], "", state
 
         with patch("llm247_v2.execution.loop.ReActLoop.run", capture_run):
             self.agent._execute_single_task(task, directive, constitution)
@@ -257,6 +294,8 @@ class TestRunAgentLoop(unittest.TestCase):
         reason = run_agent_loop(agent, poll_interval=0, max_cycles=10, sleeper=noop)
         self.assertEqual(reason, "interrupted")
         agent.run_cycle.assert_not_called()
+
+
 
 
 if __name__ == "__main__":

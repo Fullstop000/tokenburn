@@ -17,6 +17,7 @@ def _git_create_worktree(args: dict, state: LoopState) -> ToolResult:
         state.worktree_path = worktree_path
         state.branch_name = branch_name
         state.active_workspace = worktree_path
+        state.notify_state_change()
         return ToolResult("git_create_worktree", args, True,
                           f"created worktree at {worktree_path} on branch {branch_name}")
     except GitOperationError as exc:
@@ -61,9 +62,16 @@ def _git_create_pr(args: dict, state: LoopState) -> ToolResult:
         return ToolResult("git_create_pr", args, False,
                           "no active worktree — call git_create_worktree first")
     try:
-        ok, output = state.git.create_pr(title, body, worktree_path=state.worktree_path)
+        ok, output = state.git.create_pr(
+            title,
+            body,
+            worktree_path=state.worktree_path,
+            task_id=state.task_id,
+            task_title=state.task_title,
+        )
         if ok:
             state.pr_url = output
+            state.notify_state_change()
         return ToolResult("git_create_pr", args, ok, output[:200])
     except GitOperationError as exc:
         return ToolResult("git_create_pr", args, False, str(exc))

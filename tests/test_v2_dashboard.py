@@ -80,6 +80,28 @@ class TestDashboardAPI(unittest.TestCase):
         self.assertEqual(stats["output_tokens"], 45)
         self.assertEqual(stats["total_tokens"], 165)
 
+    def test_api_stats_prefers_realtime_llm_audit_totals_when_available(self):
+        self.store.insert_task(Task(
+            id="t1", title="T", description="D", source="manual",
+            status="executing", priority=2,
+            prompt_token_cost=10,
+            completion_token_cost=5,
+            token_cost=15,
+        ))
+        llm_audit_path = Path(self.tmp.name) / "llm_audit.jsonl"
+        llm_audit_path.write_text(
+            "\n".join([
+                json.dumps({"seq": 1, "prompt_tokens": 120, "completion_tokens": 45, "total_tokens": 165}),
+                json.dumps({"seq": 2, "prompt_tokens": 30, "completion_tokens": 12, "total_tokens": 42}),
+            ]) + "\n",
+            encoding="utf-8",
+        )
+
+        stats = _api_stats(self.store, Path(self.tmp.name))
+        self.assertEqual(stats["input_tokens"], 150)
+        self.assertEqual(stats["output_tokens"], 57)
+        self.assertEqual(stats["total_tokens"], 207)
+
     def test_api_summary_includes_briefing_changes_and_attention(self):
         thread_store = ThreadStore(Path(self.tmp.name) / "threads.db")
         task = Task(

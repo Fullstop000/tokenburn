@@ -100,7 +100,7 @@ def serve_dashboard(
             elif path == "/api/cycles":
                 self._serve_json(_api_cycles(store))
             elif path == "/api/stats":
-                self._serve_json(_api_stats(store))
+                self._serve_json(_api_stats(store, _state_dir))
             elif path == "/api/summary":
                 self._serve_json(_api_summary(
                     store,
@@ -301,8 +301,19 @@ def _api_cycles(store: TaskStore) -> dict:
     }
 
 
-def _api_stats(store: TaskStore) -> dict:
-    return store.get_stats()
+def _api_stats(store: TaskStore, state_dir: Optional[Path] = None) -> dict:
+    stats = store.get_stats()
+    if state_dir is None:
+        return stats
+
+    llm_totals = _read_llm_audit_totals(state_dir / "llm_audit.jsonl")
+    if llm_totals is None:
+        return stats
+
+    stats["input_tokens"] = llm_totals["input_tokens"]
+    stats["output_tokens"] = llm_totals["output_tokens"]
+    stats["total_tokens"] = llm_totals["total_tokens"]
+    return stats
 
 
 def _api_summary(
@@ -316,7 +327,7 @@ def _api_summary(
 ) -> dict:
     tasks = store.list_tasks(limit=200)
     task_rows = [_task_row(task) for task in tasks]
-    stats = _api_stats(store)
+    stats = _api_stats(store, state_dir)
     directive = _api_get_directive(directive_path)
     bootstrap = _api_bootstrap_status(model_store, bootstrap_status_provider)
     cycles = _api_cycles(store)["cycles"]
@@ -816,6 +827,36 @@ def _read_jsonl_tail(path: Path, limit: int) -> list[dict]:
         return results
     except OSError:
         return []
+
+
+def _read_llm_audit_totals(path: Path) -> Optional[dict[str, int]]:
+    if not path.exists():
+        return None
+
+    input_tokens = 0
+    output_tokens = 0
+    total_tokens = 0
+    try:
+        with open(path, encoding="utf-8") as handle:
+            for raw_line in handle:
+                line = raw_line.strip()
+                if not line:
+                    continue
+                try:
+                    entry = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                input_tokens += int(entry.get("prompt_tokens") or 0)
+                output_tokens += int(entry.get("completion_tokens") or 0)
+                total_tokens += int(entry.get("total_tokens") or 0)
+    except OSError:
+        return None
+
+    return {
+        "input_tokens": input_tokens,
+        "output_tokens": output_tokens,
+        "total_tokens": total_tokens,
+    }
 
 
 def _api_activity(state_dir: Path, limit: int, module: str) -> dict:

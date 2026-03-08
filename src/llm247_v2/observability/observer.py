@@ -685,6 +685,36 @@ class Observer:
             data={"description": description},
         ))
 
+    def llm_tool_selection(
+        self,
+        *,
+        task_id: str,
+        model: str,
+        tool_names: list[str],
+        prompt_tokens: int,
+        completion_tokens: int,
+        total_tokens: int,
+    ) -> None:
+        detail = ", ".join(tool_names[:4]) if tool_names else "no tools"
+        if len(tool_names) > 4:
+            detail = f"{detail}, +{len(tool_names) - 4} more"
+        self.emit(AgentEvent(
+            task_id=task_id,
+            module="LLM",
+            family="tool_selection",
+            event_name="tool_selection_recorded",
+            detail=f"{detail} | in={prompt_tokens} out={completion_tokens} total={total_tokens}",
+            success=True,
+            data={
+                "model": model,
+                "tool_names": tool_names,
+                "tool_count": len(tool_names),
+                "prompt_tokens": prompt_tokens,
+                "completion_tokens": completion_tokens,
+                "total_tokens": total_tokens,
+            },
+        ))
+
     def system_event(self, action: str, detail: str = "", success: Optional[bool] = None) -> None:
         self.emit(AgentEvent(
             module="ControlPlane", family="runtime", event_name=action,
