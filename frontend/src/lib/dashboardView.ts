@@ -1,6 +1,6 @@
 import type { TaskSummary } from '../types/dashboard'
 
-export type DashboardPage = 'overview' | 'work' | 'discovery' | 'memory' | 'control'
+export type DashboardPage = 'overview' | 'work' | 'discovery' | 'memory' | 'control' | 'inbox'
 export type WorkPanel = 'tasks' | 'detail' | 'cycles'
 export type MemoryPanel = 'activity' | 'audit' | 'experience'
 export type ControlPanel = 'models' | 'directive' | 'help' | 'inject'

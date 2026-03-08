@@ -141,6 +141,31 @@ export interface BootstrapStatusPayload {
   message: string
 }
 
+/** One thread in the Inbox. */
+export interface ThreadSummary {
+  id: string
+  title: string
+  status: string
+  created_by: string
+  created_at?: string
+  updated_at?: string
+}
+
+/** One message inside a thread. */
+export interface ThreadMessage {
+  id: string
+  role: 'agent' | 'human'
+  body: string
+  created_at?: string
+}
+
+/** Full thread detail with messages and linked task ids. */
+export interface ThreadDetail {
+  thread: ThreadSummary
+  messages: ThreadMessage[]
+  task_ids: string[]
+}
+
 /** Recent discovery projection derived from observer activity. */
 export interface DiscoveryEventEntry {
   phase?: string

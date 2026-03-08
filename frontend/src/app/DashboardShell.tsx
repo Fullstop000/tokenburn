@@ -7,6 +7,7 @@ import type { DashboardPage } from '../lib/dashboardView'
 const PAGE_LABELS: Record<DashboardPage, string> = {
   overview: 'Overview',
   work: 'Work',
+  inbox: 'Inbox',
   discovery: 'Discovery',
   memory: 'Memory & Audit',
   control: 'Control',
@@ -18,6 +19,7 @@ interface DashboardShellProps {
   directive: DirectivePayload | null
   metaText: string
   pauseLoading: boolean
+  inboxUnread?: number
   onNavigate: (page: DashboardPage) => void
   onTogglePause: () => void
   children: React.ReactNode
@@ -29,6 +31,7 @@ export function DashboardShell({
   directive,
   metaText,
   pauseLoading,
+  inboxUnread = 0,
   onNavigate,
   onTogglePause,
   children,
@@ -64,7 +67,9 @@ export function DashboardShell({
                       >
                         <span className="font-medium">{label}</span>
                         <span className={`text-xs ${isActive ? 'text-primary-foreground/80' : 'text-muted-foreground'}`}>
-                          0{Object.keys(PAGE_LABELS).indexOf(page) + 1}
+                          {page === 'inbox' && inboxUnread > 0
+                            ? <span className="rounded-full bg-amber-500 px-1.5 py-0.5 text-[10px] font-bold text-white">{inboxUnread}</span>
+                            : `0${Object.keys(PAGE_LABELS).indexOf(page) + 1}`}
                         </span>
                       </button>
                     )

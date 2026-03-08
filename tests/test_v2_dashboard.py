@@ -31,6 +31,7 @@ from llm247_v2.core.models import Directive, ModelBindingPoint, ModelType, Task,
 from llm247_v2.storage.model_registry import ModelRegistryStore
 from llm247_v2.storage.store import TaskStore
 from llm247_v2.storage.experience import Experience, ExperienceStore
+from llm247_v2.storage.thread_store import ThreadStore
 
 
 class TestDashboardAPI(unittest.TestCase):
@@ -422,6 +423,40 @@ class TestTaskDetailAPI(unittest.TestCase):
         self.store.add_event("ev1", "execute.step", "Edited file")
         result = _api_task_detail(self.store, "ev1")
         self.assertEqual(len(result["events"]), 2)
+
+    def test_task_detail_with_thread_store_linked(self):
+        """_api_task_detail must not access removed Thread attributes."""
+        self.store.insert_task(Task(
+            id="ts1", title="Blocked Task", description="d",
+            source="manual", status="needs_human", priority=2,
+        ))
+        thread_store = ThreadStore(Path(self.tmp.name) / "threads.db")
+        try:
+            thread = thread_store.create_thread(title="Blocked Task", created_by="agent", body="Need help")
+            thread_store.link_task(thread.id, "ts1")
+            result = _api_task_detail(self.store, "ts1", thread_store=thread_store)
+            self.assertIn("task", result)
+            self.assertIn("thread", result)
+            thread_data = result["thread"]
+            self.assertEqual(thread_data["id"], thread.id)
+            self.assertEqual(thread_data["status"], "open")
+            self.assertNotIn("github_issue_number", thread_data)
+            self.assertIsInstance(thread_data["messages"], list)
+        finally:
+            thread_store.close()
+
+    def test_task_detail_with_thread_store_no_link(self):
+        """Result must not include 'thread' key when no thread is linked."""
+        self.store.insert_task(Task(
+            id="ts2", title="Unlinked Task", description="d",
+            source="manual", status="queued", priority=2,
+        ))
+        thread_store = ThreadStore(Path(self.tmp.name) / "threads2.db")
+        try:
+            result = _api_task_detail(self.store, "ts2", thread_store=thread_store)
+            self.assertNotIn("thread", result)
+        finally:
+            thread_store.close()
 
 
 class TestDashboardServer(unittest.TestCase):

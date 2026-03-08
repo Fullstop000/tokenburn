@@ -115,8 +115,10 @@ def main() -> int:
     if args.ui:
         from llm247_v2.dashboard.server import serve_dashboard
         from llm247_v2.storage.experience import ExperienceStore
+        from llm247_v2.storage.thread_store import ThreadStore as _ThreadStore
 
         exp_store = ExperienceStore(state_dir / "experience.db")
+        ui_thread_store = _ThreadStore(state_dir / "threads.db")
         try:
             serve_dashboard(
                 store,
@@ -127,10 +129,12 @@ def main() -> int:
                 experience_store=exp_store,
                 model_store=model_store,
                 bootstrap_status_provider=lambda: _bootstrap_status(model_store),
+                thread_store=ui_thread_store,
             )
             return 0
         finally:
             exp_store.close()
+            ui_thread_store.close()
             model_store.close()
             store.close()
 
@@ -142,6 +146,9 @@ def main() -> int:
 
     exp_store = ExperienceStore(state_dir / "experience.db")
 
+    from llm247_v2.storage.thread_store import ThreadStore
+    thread_store = ThreadStore(state_dir / "threads.db")
+
     if args.with_ui or bootstrap["requires_setup"]:
         ui_thread = threading.Thread(
             target=serve_dashboard,
@@ -151,6 +158,7 @@ def main() -> int:
                 "experience_store": exp_store,
                 "model_store": model_store,
                 "bootstrap_status_provider": lambda: _bootstrap_status(model_store),
+                "thread_store": thread_store,
             },
             daemon=True,
         )
@@ -214,9 +222,9 @@ def main() -> int:
         experience_store=exp_store,
         observer=observer,
         branch_prefix=args.branch_prefix,
-        command_timeout=command_timeout,
         interest_profile_path=interest_profile_path,
         shutdown_event=shutdown_event,
+        thread_store=thread_store,
     )
 
     def _handle_signal(signum: int, _frame) -> None:
@@ -272,6 +280,7 @@ def main() -> int:
         observer.close()
         exp_store.close()
         audit_logger.close()
+        thread_store.close()
         model_store.close()
         store.close()
 

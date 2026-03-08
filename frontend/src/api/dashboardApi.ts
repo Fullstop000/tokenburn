@@ -10,6 +10,8 @@ import type {
   TaskDetail,
   TaskEvent,
   TaskSummary,
+  ThreadDetail,
+  ThreadSummary,
 } from '../types/dashboard'
 
 /** HTTP client dedicated to dashboard backend APIs. */
@@ -187,6 +189,57 @@ export class DashboardApiClient {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
+    })
+  }
+
+  /** List threads, optionally filtered by status. */
+  getThreads(status?: string): Promise<{ threads: ThreadSummary[]; total: number }> {
+    const query = status ? `?status=${encodeURIComponent(status)}` : ''
+    return this.requestJson(`/api/threads${query}`)
+  }
+
+  /** Fetch one thread with messages and linked task ids. */
+  getThreadDetail(threadId: string): Promise<ThreadDetail & { error?: string }> {
+    return this.requestJson(`/api/threads/${encodeURIComponent(threadId)}`)
+  }
+
+  /** Post a human reply to an existing thread. */
+  replyToThread(threadId: string, body: string): Promise<{ status?: string; thread_id?: string; error?: string }> {
+    return this.requestJson(`/api/threads/${encodeURIComponent(threadId)}/reply`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ body }),
+    })
+  }
+
+  /** Human creates a new thread (Shape B) — also queues a task. */
+  createThread(payload: {
+    title: string
+    description?: string
+    priority?: number
+  }): Promise<{ status?: string; thread_id?: string; task_id?: string; error?: string }> {
+    return this.requestJson('/api/threads', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    })
+  }
+
+  /** Human closes a thread; linked tasks in NEEDS_HUMAN/QUEUED are moved to FAILED. */
+  closeThread(threadId: string, reason: string): Promise<{ status?: string; thread_id?: string; error?: string }> {
+    return this.requestJson(`/api/threads/${encodeURIComponent(threadId)}/close`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ reason }),
+    })
+  }
+
+  /** Bulk-close a list of threads. */
+  bulkCloseThreads(threadIds: string[]): Promise<{ closed?: number; error?: string }> {
+    return this.requestJson('/api/threads/bulk-close', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ thread_ids: threadIds }),
     })
   }
 }

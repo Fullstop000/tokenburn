@@ -147,7 +147,8 @@ class TaskStore:
                    title=?, description=?, source=?, status=?, priority=?,
                    updated_at=?, branch_name=?, pr_url=?, execution_trace=?,
                    execution_log=?, error_message=?, cycle_id=?,
-                   token_cost=?, time_cost_seconds=?, whats_learned=?, human_help_request=?
+                   token_cost=?, time_cost_seconds=?, whats_learned=?,
+                   human_help_request=?
                    WHERE id=?""",
                 (
                     task.title, task.description, task.source, task.status,
