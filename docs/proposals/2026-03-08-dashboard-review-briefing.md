@@ -1,11 +1,11 @@
 # Proposal: Dashboard Review Briefing Redesign
 
-> Status: Approved for Plan
+> Status: Superseded
 > Created: 2026-03-08
-> Decision: Approved; implementation is in progress in PR #62
+> Decision: Implemented and merged in PR #62
 > Scope: Dashboard information architecture, homepage priorities, navigation hierarchy, and visual design direction
-> Next Step: Merge PR #62, complete the linked plan, and then update `docs/design/dashboard.md`
-> Related: `docs/design/dashboard.md`, `docs/design/observability.md`, `docs/design/project.md`, `docs/plans/2026-03-08-dashboard-review-briefing.md`
+> Next Step: Keep `docs/design/dashboard.md` aligned with the merged implementation
+> Related: `docs/design/dashboard.md`, `docs/design/observability.md`, `docs/design/project.md`, `docs/archive/2026-03-08-dashboard-review-briefing.md`
 
 ## Summary
 

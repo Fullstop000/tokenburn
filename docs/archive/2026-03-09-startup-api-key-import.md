@@ -1,8 +1,8 @@
 # Plan: Startup API Key Import
 
-> Status: In Progress
+> Status: Completed
 > Created: 2026-03-09
-> Completed:
+> Completed: 2026-03-09
 > PR: https://github.com/Fullstop000/sprout/pull/62
 > Proposal: [docs/proposals/2026-03-09-startup-api-key-import.md](../proposals/2026-03-09-startup-api-key-import.md)
 
