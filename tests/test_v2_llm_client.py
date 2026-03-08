@@ -2,10 +2,12 @@ import json
 import tempfile
 import unittest
 from unittest.mock import patch
+from types import SimpleNamespace
 from pathlib import Path
 
 from llm247_v2.core.models import ModelBindingPoint, ModelType, RegisteredModel
 from llm247_v2.llm.client import (
+    ArkLLMClient,
     LLMAuditLogger,
     RoutedLLMClient,
     TokenTracker,
@@ -234,6 +236,36 @@ class TestProbeRegisteredModelConnection(unittest.TestCase):
         payload = json.loads(request.data.decode("utf-8"))
         self.assertEqual(payload["model"], "embed-model")
         self.assertEqual(payload["input"][0]["type"], "text")
+
+
+class TestArkLLMClientToolCalls(unittest.TestCase):
+    @patch("llm247_v2.llm.client.ArkLLMClient._extract_usage", return_value=UsageInfo())
+    @patch("openai.OpenAI")
+    def test_generate_with_tools_preserves_reasoning_content(self, mock_openai_cls, _mock_extract_usage):
+        message = SimpleNamespace(
+            content=None,
+            tool_calls=[
+                SimpleNamespace(
+                    function=SimpleNamespace(name="run_command", arguments='{"command":"pwd"}')
+                )
+            ],
+            model_extra={"reasoning_content": "Need to inspect the workspace first."},
+        )
+        response = SimpleNamespace(
+            choices=[SimpleNamespace(message=message)],
+            usage=SimpleNamespace(prompt_tokens=0, completion_tokens=0, total_tokens=0),
+        )
+        mock_openai_cls.return_value.chat.completions.create.return_value = response
+
+        client = ArkLLMClient(api_key="secret", base_url="https://example.com/v1", model="test-model")
+
+        _text, tool_calls, _usage = client.generate_with_tools(
+            messages=[{"role": "user", "content": "inspect"}],
+            tools=[{"type": "function", "function": {"name": "run_command", "parameters": {"type": "object"}}}],
+        )
+
+        self.assertEqual(len(tool_calls), 1)
+        self.assertEqual(tool_calls[0].reasoning, "Need to inspect the workspace first.")
 
 
 if __name__ == "__main__":

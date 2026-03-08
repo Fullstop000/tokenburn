@@ -113,10 +113,13 @@ class ReActLoop:
                 "content": None,
                 "tool_calls": [],
             }
+            assistant_reasoning = ""
             tool_result_turns: list[dict] = []
 
             for idx, tool_call in enumerate(tool_calls):
                 call_id = f"call_{step}_{idx}"
+                if not assistant_reasoning and tool_call.reasoning:
+                    assistant_reasoning = tool_call.reasoning
 
                 assistant_turn["tool_calls"].append({
                     "id": call_id,
@@ -152,10 +155,14 @@ class ReActLoop:
 
                 # Check finish signal
                 if result.success and result.output.startswith(FINISH_SIGNAL):
+                    if assistant_reasoning:
+                        assistant_turn["reasoning_content"] = assistant_reasoning
                     messages.append(assistant_turn)
                     messages.extend(tool_result_turns)
                     return True, trace, ""
 
+            if assistant_reasoning:
+                assistant_turn["reasoning_content"] = assistant_reasoning
             messages.append(assistant_turn)
             messages.extend(tool_result_turns)
 

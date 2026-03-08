@@ -214,6 +214,10 @@ class ArkLLMClient:
             msg = response.choices[0].message
             usage_info = self._extract_usage(response.usage)
             self.tracker.record(usage_info)
+            reasoning_content = ""
+            model_extra = getattr(msg, "model_extra", None) or {}
+            if isinstance(model_extra, dict):
+                reasoning_content = str(model_extra.get("reasoning_content", "") or "")
 
             tool_calls: list[ToolCall] = []
             if msg.tool_calls:
@@ -225,6 +229,7 @@ class ArkLLMClient:
                     tool_calls.append(ToolCall(
                         tool=tc.function.name,
                         arguments=arguments,
+                        reasoning=reasoning_content,
                     ))
 
             text_content = msg.content or None
