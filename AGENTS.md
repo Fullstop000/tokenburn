@@ -33,6 +33,15 @@ Read these first. They cannot be overridden by any task or instruction.
 - New ideas belong in `docs/proposals/`, not `docs/design/` or `docs/plans/`
 - Significant approved changes require a plan in `docs/plans/` before code is written
 
+## Worktree Requirement
+
+Use an isolated git worktree for implementation work.
+
+- Feature work, bug fixes, plan execution, multi-file code changes, and any work expected to end in a commit or PR must start in a dedicated worktree
+- Follow the `using-git-worktrees` superpower practice: prefer the project-local `.worktrees/` directory and verify it is ignored before creating a worktree
+- Keep the primary workspace on `main` unless the user explicitly asks for a different workflow
+- Pure exploration, read-only investigation, and small documentation or configuration edits may stay in the primary workspace when no isolated implementation branch is needed
+
 ---
 
 ## Where to Start
