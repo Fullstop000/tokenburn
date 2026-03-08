@@ -1,6 +1,6 @@
 # Proposal: Issue + Chat Interaction Model for Human-Agent Collaboration
 
-> Status: Approved for Plan
+> Status: Superseded
 > Created: 2026-03-07
 > Decision: Approved — interaction model adopted; implementation pivoted from GitHub Issues to a native dashboard inbox (no external dependency); Shape A + B delivered
 > Scope: Human-agent interaction layer — affects Task state machine, dashboard, and agent cycle
