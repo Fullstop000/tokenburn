@@ -2,9 +2,9 @@
 
 > Status: Approved for Plan
 > Created: 2026-03-09
-> Decision: Approved by user; implement one focused fix for realtime dashboard telemetry and task/PR backlinking
+> Decision: Approved; implementation is in progress in PR #61
 > Scope: Execution observability, dashboard projections, git PR metadata persistence, task/PR cross-linking
-> Next Step: Execute the linked plan in `docs/plans/2026-03-09-realtime-execution-telemetry-and-task-pr-linkage.md`
+> Next Step: Merge PR #61, complete the linked plan, then update the affected design docs
 > Related: `docs/design/observability.md`, `docs/design/execution.md`, `docs/design/dashboard.md`, `docs/plans/2026-03-09-realtime-execution-telemetry-and-task-pr-linkage.md`
 
 ## Summary

@@ -1,7 +1,8 @@
 # Plan: Realtime Execution Telemetry And Task/PR Linkage
 
-> Status: Approved
+> Status: In Progress
 > Created: 2026-03-09
+> PR: https://github.com/Fullstop000/sprout/pull/61
 > Proposal: [docs/proposals/2026-03-09-realtime-execution-telemetry-and-task-pr-linkage.md](../proposals/2026-03-09-realtime-execution-telemetry-and-task-pr-linkage.md)
 
 ## Goal
