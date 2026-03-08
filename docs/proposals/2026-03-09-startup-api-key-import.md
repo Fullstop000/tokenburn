@@ -1,11 +1,11 @@
 # Proposal: Startup API Key Import
 
-> Status: Approved for Plan
+> Status: Superseded
 > Created: 2026-03-09
-> Decision: Approved; implementation is in progress in PR #62
+> Decision: Implemented and merged in PR #62
 > Scope: `scripts/start_v2.sh`, V2 CLI bootstrap, and model registry import logic
-> Next Step: Merge PR #62, complete the linked plan, and then update any affected design docs
-> Related: [docs/design/dashboard.md](../design/dashboard.md), [docs/plans/2026-03-06-model-registry-and-routing.md](../plans/2026-03-06-model-registry-and-routing.md)
+> Next Step: Keep the relevant design docs aligned with the merged implementation
+> Related: [docs/design/dashboard.md](../design/dashboard.md), [docs/plans/2026-03-06-model-registry-and-routing.md](../plans/2026-03-06-model-registry-and-routing.md), [docs/archive/2026-03-09-startup-api-key-import.md](../archive/2026-03-09-startup-api-key-import.md)
 
 ## Summary
 
