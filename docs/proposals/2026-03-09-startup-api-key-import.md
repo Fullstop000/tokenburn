@@ -2,9 +2,9 @@
 
 > Status: Approved for Plan
 > Created: 2026-03-09
-> Decision: Ship startup-time import of one `api_key.yaml` file into the V2 model registry
+> Decision: Approved; implementation is in progress in PR #62
 > Scope: `scripts/start_v2.sh`, V2 CLI bootstrap, and model registry import logic
-> Next Step: Execute the linked plan in [docs/plans/2026-03-09-startup-api-key-import.md](../plans/2026-03-09-startup-api-key-import.md)
+> Next Step: Merge PR #62, complete the linked plan, and then update any affected design docs
 > Related: [docs/design/dashboard.md](../design/dashboard.md), [docs/plans/2026-03-06-model-registry-and-routing.md](../plans/2026-03-06-model-registry-and-routing.md)
 
 ## Summary

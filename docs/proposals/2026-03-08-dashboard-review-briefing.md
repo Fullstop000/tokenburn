@@ -2,9 +2,9 @@
 
 > Status: Approved for Plan
 > Created: 2026-03-08
-> Decision: Approve the dashboard redesign direction and implementation scope for an async review-first control plane
+> Decision: Approved; implementation is in progress in PR #62
 > Scope: Dashboard information architecture, homepage priorities, navigation hierarchy, and visual design direction
-> Next Step: Execute the linked implementation plan and update `docs/design/dashboard.md` after the redesign lands
+> Next Step: Merge PR #62, complete the linked plan, and then update `docs/design/dashboard.md`
 > Related: `docs/design/dashboard.md`, `docs/design/observability.md`, `docs/design/project.md`, `docs/plans/2026-03-08-dashboard-review-briefing.md`
 
 ## Summary

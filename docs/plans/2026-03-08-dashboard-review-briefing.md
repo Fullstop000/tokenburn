@@ -1,7 +1,8 @@
 # Plan: Dashboard Review Briefing Redesign
 
-> Status: Approved
+> Status: In Progress
 > Created: 2026-03-08
+> PR: https://github.com/Fullstop000/sprout/pull/62
 > Proposal: [docs/proposals/2026-03-08-dashboard-review-briefing.md](../proposals/2026-03-08-dashboard-review-briefing.md)
 
 ## Goal
