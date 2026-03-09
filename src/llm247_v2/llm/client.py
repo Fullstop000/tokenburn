@@ -196,6 +196,29 @@ class ArkLLMClient:
                 raise BudgetExhaustedError(str(exc)) from exc
             raise
 
+    def _extract_reasoning_content(self, msg) -> str:
+        reasoning_content = ""
+        model_extra = getattr(msg, "model_extra", None) or {}
+        if isinstance(model_extra, dict):
+            reasoning_content = str(model_extra.get("reasoning_content", "") or "")
+        return reasoning_content
+
+    def _parse_tool_calls(self, tool_calls_raw: list, reasoning_content: str) -> list[ToolCall]:
+        tool_calls: list[ToolCall] = []
+        if not tool_calls_raw:
+            return tool_calls
+        for tc in tool_calls_raw:
+            try:
+                arguments = json.loads(tc.function.arguments)
+            except (json.JSONDecodeError, ValueError):
+                arguments = {"_raw": tc.function.arguments}
+            tool_calls.append(ToolCall(
+                tool=tc.function.name,
+                arguments=arguments,
+                reasoning=reasoning_content,
+            ))
+        return tool_calls
+
     def generate_with_tools(
         self,
         messages: list[dict],
@@ -214,23 +237,8 @@ class ArkLLMClient:
             msg = response.choices[0].message
             usage_info = self._extract_usage(response.usage)
             self.tracker.record(usage_info)
-            reasoning_content = ""
-            model_extra = getattr(msg, "model_extra", None) or {}
-            if isinstance(model_extra, dict):
-                reasoning_content = str(model_extra.get("reasoning_content", "") or "")
-
-            tool_calls: list[ToolCall] = []
-            if msg.tool_calls:
-                for tc in msg.tool_calls:
-                    try:
-                        arguments = json.loads(tc.function.arguments)
-                    except (json.JSONDecodeError, ValueError):
-                        arguments = {"_raw": tc.function.arguments}
-                    tool_calls.append(ToolCall(
-                        tool=tc.function.name,
-                        arguments=arguments,
-                        reasoning=reasoning_content,
-                    ))
+            reasoning_content = self._extract_reasoning_content(msg)
+            tool_calls = self._parse_tool_calls(msg.tool_calls, reasoning_content)
 
             text_content = msg.content or None
 
