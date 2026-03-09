@@ -13,6 +13,7 @@
 
 | Status | Proposal | Scope | Next Step |
 |--------|----------|-------|-----------|
+| `Approved for Plan` | [2026-03-09-github-actions-pr-ci.md](2026-03-09-github-actions-pr-ci.md) | Add repository-owned GitHub Actions checks for backend tests, coverage, and frontend build | Execute [docs/plans/2026-03-09-github-actions-pr-ci.md](../plans/2026-03-09-github-actions-pr-ci.md) and open the CI PR |
 | `Approved for Plan` | [2026-03-08-observability-event-architecture.md](2026-03-08-observability-event-architecture.md) | Restructure observability around structured module event catalogs, correlations, and projections | PR #57 is in progress; merge it, complete the plan, and then update `docs/design/observability.md` |
 | `Approved for Plan` | [2026-03-07-human-agent-interaction.md](2026-03-07-human-agent-interaction.md) | Replace one-way `human_help_request` handoff with GitHub Issues + internal mirror | Plan at [docs/plans/2026-03-07-human-agent-interaction.md](../plans/2026-03-07-human-agent-interaction.md) |
 | `Draft` | [2026-03-07-openclaw-memory-architecture.md](2026-03-07-openclaw-memory-architecture.md) | Benchmark Sprout memory architecture against OpenClaw's memory subsystem | Decide whether one narrow memory change is worth turning into a plan |
