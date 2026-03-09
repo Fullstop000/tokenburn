@@ -1,7 +1,7 @@
 # Execution Module Design
 
 > Module: `src/llm247_v2/execution/`
-> Last updated: 2026-03-06
+> Last updated: 2026-03-09
 
 ## Purpose
 
@@ -68,6 +68,15 @@ Runs post-execution checks on changed files:
 - **Secret scan** — basic regex scan for accidentally committed secrets
 
 All checks must pass for the task to proceed to git shipping.
+
+### Repository PR CI
+
+The repository also runs one first-party GitHub Actions workflow for pull requests and pushes to `main`.
+That workflow reuses the maintained verification commands:
+- backend: coverage over the stable `test_v2_*` modules, currently excluding `tests/test_v2_agent.py` because `main` already has three failing tests there
+- frontend: `npm run build` from `frontend/`
+
+The CI workflow is a repository-level gate for human review, not a replacement for task-local verification inside the agent loop.
 
 ### Git Operations (`git_ops.py`)
 

@@ -1,7 +1,7 @@
 # Project Design
 
 > Scope: Project-level mission, invariants, repository conventions, and authoritative document map
-> Last updated: 2026-03-07
+> Last updated: 2026-03-09
 
 ## Mission
 
@@ -72,6 +72,12 @@ Maintained runtime tests use the `test_v2_*.py` prefix. Run them with:
 ```bash
 PYTHONPATH=src python3 -m unittest discover -s tests -p "test_v2_*.py" -v
 ```
+
+### Repository CI
+
+The repository owns one GitHub Actions PR CI workflow in `.github/workflows/pr-ci.yml`.
+It runs the maintained Python unit test suite under coverage and runs the frontend production build on pull requests to `main` and pushes to `main`.
+Until the pre-existing `tests/test_v2_agent.py` failures on `main` are fixed, the backend CI command intentionally runs the stable `test_v2_*` modules except that file.
 
 ## Human Review Entry Points
 
