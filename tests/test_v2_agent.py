@@ -144,7 +144,7 @@ class TestAutonomousAgentV2(unittest.TestCase):
         from llm247_v2.core.constitution import load_constitution
         constitution = load_constitution(self.constitution_path)
 
-        with patch("llm247_v2.execution.loop.ReActLoop.run", return_value=(True, [])):
+        with patch("llm247_v2.execution.loop.ReActLoop.run", return_value=(True, [], "")):
             success = self.agent._execute_single_task(task, directive, constitution)
 
         self.assertTrue(success)
@@ -165,7 +165,7 @@ class TestAutonomousAgentV2(unittest.TestCase):
         from llm247_v2.core.constitution import load_constitution
         constitution = load_constitution(self.constitution_path)
 
-        with patch("llm247_v2.execution.loop.ReActLoop.run", return_value=(False, [])):
+        with patch("llm247_v2.execution.loop.ReActLoop.run", return_value=(False, [], "mock failure")):
             success = self.agent._execute_single_task(task, directive, constitution)
 
         self.assertFalse(success)
@@ -193,7 +193,7 @@ class TestAutonomousAgentV2(unittest.TestCase):
 
         def capture_run(self_loop, task, workspace, directive, experience_context=""):
             captured["llm"] = self_loop.llm
-            return True, []
+            return True, [], ""
 
         with patch("llm247_v2.execution.loop.ReActLoop.run", capture_run):
             self.agent._execute_single_task(task, directive, constitution)
