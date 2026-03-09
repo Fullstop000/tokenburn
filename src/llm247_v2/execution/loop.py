@@ -5,6 +5,7 @@ import logging
 import threading
 from dataclasses import asdict
 from pathlib import Path
+from typing import Callable
 
 from llm247_v2.core.constitution import Constitution
 from llm247_v2.core.models import Directive, Task, ToolCall, ToolResult
@@ -15,6 +16,7 @@ from llm247_v2.llm.prompts import render
 from llm247_v2.observability.observer import AgentEvent, Observer
 
 logger = logging.getLogger("llm247_v2.execution.loop")
+ProgressCallback = Callable[[LoopState], None]
 
 
 class ReActLoop:
@@ -43,6 +45,7 @@ class ReActLoop:
         workspace: Path,
         directive: Directive,
         experience_context: str = "",
+        progress_callback: ProgressCallback | None = None,
     ) -> tuple[bool, list[ToolResult], str]:
         """Run the ReAct loop for one task.
 
@@ -97,6 +100,9 @@ class ReActLoop:
                 ))
                 return False, trace, reason
 
+            if progress_callback is not None:
+                progress_callback(state)
+
             if not tool_calls:
                 # LLM returned text instead of a tool call — nudge it
                 messages.append({"role": "assistant", "content": _text or ""})
@@ -146,6 +152,8 @@ class ReActLoop:
                     result.success,
                     output=result.output[:100] if not result.success else "",
                 )
+                if progress_callback is not None:
+                    progress_callback(state)
 
                 tool_result_turns.append({
                     "role": "tool",

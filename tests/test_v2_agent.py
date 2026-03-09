@@ -1,12 +1,13 @@
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 from llm247_v2.agent import AutonomousAgentV2, run_agent_loop
 from llm247_v2.core.directive import save_directive
-from llm247_v2.llm.client import BudgetExhaustedError
 from llm247_v2.core.models import Directive, ModelBindingPoint, Task, TaskSourceConfig, TaskStatus
+from llm247_v2.llm.client import BudgetExhaustedError, TokenTracker, UsageInfo
 from llm247_v2.observability.observer import MemoryHandler, Observer
 from llm247_v2.storage.store import TaskStore
 
@@ -14,6 +15,7 @@ from llm247_v2.storage.store import TaskStore
 class FakeLLM:
     def __init__(self):
         self.call_count = 0
+        self.tracker = TokenTracker()
 
     def generate(self, prompt: str) -> str:
         self.call_count += 1
@@ -191,7 +193,7 @@ class TestAutonomousAgentV2(unittest.TestCase):
 
         captured = {}
 
-        def capture_run(self_loop, task, workspace, directive, experience_context=""):
+        def capture_run(self_loop, task, workspace, directive, experience_context="", progress_callback=None):
             captured["llm"] = self_loop.llm
             return True, [], ""
 
@@ -199,6 +201,50 @@ class TestAutonomousAgentV2(unittest.TestCase):
             self.agent._execute_single_task(task, directive, constitution)
 
         self.assertIn(ModelBindingPoint.EXECUTION.value, self.agent.llm.points)
+
+    def test_execution_persists_live_progress_before_completion(self):
+        task = Task(
+            id="exec-live-1",
+            title="Live progress task",
+            description="manual test",
+            source="manual",
+            status=TaskStatus.QUEUED.value,
+            priority=1,
+        )
+        self.store.insert_task(task)
+        execution_llm = FakeLLM()
+        self.agent.llm = FakeRouter({ModelBindingPoint.EXECUTION.value: execution_llm})
+        directive = Directive()
+        from llm247_v2.core.constitution import load_constitution
+        constitution = load_constitution(self.constitution_path)
+
+        captured = {}
+
+        def capture_run(self_loop, task, workspace, directive, experience_context="", progress_callback=None):
+            self_loop.llm.tracker.record(UsageInfo(prompt_tokens=80, completion_tokens=20, total_tokens=100))
+            progress_callback(SimpleNamespace(
+                branch_name="codex/live-progress",
+                pr_url="https://github.com/Fullstop000/sprout/pull/99",
+            ))
+            live_task = self.store.get_task(task.id)
+            captured["status"] = live_task.status
+            captured["prompt_token_cost"] = live_task.prompt_token_cost
+            captured["completion_token_cost"] = live_task.completion_token_cost
+            captured["token_cost"] = live_task.token_cost
+            captured["branch_name"] = live_task.branch_name
+            captured["pr_url"] = live_task.pr_url
+            return True, [], ""
+
+        with patch("llm247_v2.execution.loop.ReActLoop.run", capture_run):
+            success = self.agent._execute_single_task(task, directive, constitution)
+
+        self.assertTrue(success)
+        self.assertEqual(captured["status"], TaskStatus.EXECUTING.value)
+        self.assertEqual(captured["prompt_token_cost"], 80)
+        self.assertEqual(captured["completion_token_cost"], 20)
+        self.assertEqual(captured["token_cost"], 100)
+        self.assertEqual(captured["branch_name"], "codex/live-progress")
+        self.assertEqual(captured["pr_url"], "https://github.com/Fullstop000/sprout/pull/99")
 
     def test_learning_extraction_uses_learning_binding_point(self):
         task = Task(

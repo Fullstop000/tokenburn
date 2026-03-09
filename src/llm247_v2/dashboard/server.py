@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import logging
 import mimetypes
+import subprocess
 import threading
 import time
 from datetime import datetime, timezone
@@ -64,6 +65,35 @@ class ModelConnectionChecker:
         return dict(payload)
 
 
+class PullRequestStatusChecker:
+    """Cache best-effort PR metadata lookups for dashboard task payloads."""
+
+    def __init__(self, *, ttl_seconds: float = 30.0) -> None:
+        self._ttl_seconds = ttl_seconds
+        self._lock = threading.Lock()
+        self._cache: dict[str, dict[str, object]] = {}
+
+    def get_status(self, pr_url: str) -> dict[str, object]:
+        """Return cached PR metadata or resolve it via `gh pr view`."""
+        if not pr_url:
+            return {}
+
+        with self._lock:
+            cached = self._cache.get(pr_url)
+            if cached:
+                checked_monotonic = float(cached.get("checked_monotonic", 0.0))
+                if time.monotonic() - checked_monotonic <= self._ttl_seconds:
+                    return dict(cached["payload"])
+
+        payload = _load_pr_status(pr_url)
+        with self._lock:
+            self._cache[pr_url] = {
+                "checked_monotonic": time.monotonic(),
+                "payload": payload,
+            }
+        return dict(payload)
+
+
 def serve_dashboard(
     store: TaskStore,
     directive_path: Path,
@@ -78,6 +108,7 @@ def serve_dashboard(
     """Start HTTP control plane server."""
     _state_dir = state_dir or directive_path.parent
     connection_checker = ModelConnectionChecker()
+    pr_checker = PullRequestStatusChecker()
 
     class Handler(BaseHTTPRequestHandler):
 
@@ -87,10 +118,15 @@ def serve_dashboard(
             qs = parse_qs(parsed.query)
 
             if path == "/api/tasks":
-                self._serve_json(_api_tasks(store))
+                self._serve_json(_api_tasks(store, pr_status_resolver=pr_checker.get_status))
             elif path.startswith("/api/tasks/"):
                 task_id = path.split("/api/tasks/")[1].split("?")[0]
-                self._serve_json(_api_task_detail(store, task_id, thread_store=thread_store))
+                self._serve_json(_api_task_detail(
+                    store,
+                    task_id,
+                    thread_store=thread_store,
+                    pr_status_resolver=pr_checker.get_status,
+                ))
             elif path == "/api/threads":
                 status_filter = qs.get("status", [""])[0]
                 self._serve_json(_api_threads(thread_store, status=status_filter or None))
@@ -109,6 +145,7 @@ def serve_dashboard(
                     model_store=model_store,
                     bootstrap_status_provider=bootstrap_status_provider,
                     thread_store=thread_store,
+                    pr_status_resolver=pr_checker.get_status,
                 ))
             elif path == "/api/help-center":
                 self._serve_json(_api_help_center(store))
@@ -260,20 +297,33 @@ def serve_dashboard(
         server.server_close()
 
 
-def _api_tasks(store: TaskStore) -> dict:
+def _api_tasks(
+    store: TaskStore,
+    *,
+    pr_status_resolver: Optional[Callable[[str], dict[str, object]]] = None,
+) -> dict:
     tasks = store.list_tasks(limit=200)
     return {
         "updated_at": datetime.now(timezone.utc).isoformat(),
-        "tasks": [_task_row(t) for t in tasks],
+        "tasks": [_task_row(t, pr_status=_resolve_pr_status(t.pr_url, pr_status_resolver)) for t in tasks],
     }
 
 
-def _api_task_detail(store: TaskStore, task_id: str, *, thread_store=None) -> dict:
+def _api_task_detail(
+    store: TaskStore,
+    task_id: str,
+    *,
+    thread_store=None,
+    pr_status_resolver: Optional[Callable[[str], dict[str, object]]] = None,
+) -> dict:
     task = store.get_task(task_id)
     if not task:
         return {"error": "task not found"}
     events = store.get_events(task_id)
-    result: dict = {"task": _task_full(task), "events": events}
+    result: dict = {
+        "task": _task_full(task, pr_status=_resolve_pr_status(task.pr_url, pr_status_resolver)),
+        "events": events,
+    }
     if thread_store:
         thread = thread_store.get_thread_for_task(task_id)
         if thread:
@@ -316,9 +366,13 @@ def _api_summary(
     model_store: Optional[ModelRegistryStore] = None,
     bootstrap_status_provider: Optional[Callable[[], dict]] = None,
     thread_store=None,
+    pr_status_resolver: Optional[Callable[[str], dict[str, object]]] = None,
 ) -> dict:
     tasks = store.list_tasks(limit=200)
-    task_rows = [_task_row(task) for task in tasks]
+    task_rows = [
+        _task_row(task, pr_status=_resolve_pr_status(task.pr_url, pr_status_resolver))
+        for task in tasks
+    ]
     stats = _api_stats(store)
     directive = _api_get_directive(directive_path)
     bootstrap = _api_bootstrap_status(model_store, bootstrap_status_provider)
@@ -949,8 +1003,9 @@ def _resolve_frontend_asset_path(request_path: str) -> Optional[Path]:
     return candidate if candidate.is_file() else None
 
 
-def _task_row(t) -> Dict:
-    return {
+def _task_row(t, pr_status: Optional[dict[str, object]] = None) -> Dict:
+    """Serialize one task row for list views and lightweight summaries."""
+    row = {
         "id": t.id, "title": t.title, "description": t.description,
         "source": t.source, "status": t.status, "priority": t.priority,
         "created_at": t.created_at, "updated_at": t.updated_at,
@@ -965,11 +1020,14 @@ def _task_row(t) -> Dict:
         "whats_learned": t.whats_learned[:200] if t.whats_learned else "",
         "human_help_request": t.human_help_request[:500] if t.human_help_request else "",
     }
+    if pr_status:
+        row.update(pr_status)
+    return row
 
 
-def _task_full(t) -> Dict:
+def _task_full(t, pr_status: Optional[dict[str, object]] = None) -> Dict:
     """Full task data without truncation — for detail view."""
-    return {
+    row = {
         "id": t.id, "title": t.title, "description": t.description,
         "source": t.source, "status": t.status, "priority": t.priority,
         "created_at": t.created_at, "updated_at": t.updated_at,
@@ -984,6 +1042,54 @@ def _task_full(t) -> Dict:
         "whats_learned": t.whats_learned,
         "human_help_request": t.human_help_request,
         "cycle_id": t.cycle_id,
+    }
+    if pr_status:
+        row.update(pr_status)
+    return row
+
+
+def _resolve_pr_status(
+    pr_url: str,
+    resolver: Optional[Callable[[str], dict[str, object]]],
+) -> dict[str, object]:
+    """Resolve PR metadata for one task without failing the dashboard response."""
+    if not pr_url or resolver is None:
+        return {}
+    try:
+        return resolver(pr_url) or {}
+    except Exception:
+        logger.debug("Failed to resolve PR status for %s", pr_url, exc_info=True)
+        return {}
+
+
+def _load_pr_status(pr_url: str) -> dict[str, object]:
+    """Look up PR metadata via GitHub CLI when a task already has a PR URL."""
+    try:
+        result = subprocess.run(
+            ["gh", "pr", "view", pr_url, "--json", "number,state,isDraft,title,url"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+            check=False,
+        )
+    except OSError:
+        return {}
+
+    if result.returncode != 0 or not result.stdout.strip():
+        return {}
+
+    try:
+        payload = json.loads(result.stdout)
+    except json.JSONDecodeError:
+        return {}
+
+    state = str(payload.get("state", "")).lower()
+    pr_status = "draft" if payload.get("isDraft") else (state or "open")
+    return {
+        "pr_number": payload.get("number"),
+        "pr_status": pr_status,
+        "pr_title": payload.get("title") or "",
+        "pr_url": payload.get("url") or pr_url,
     }
 
 

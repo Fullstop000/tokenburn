@@ -212,13 +212,14 @@ class AutonomousAgentV2:
 
     def _execute_single_task(self, task, directive: Directive, constitution: Constitution) -> bool:
         task_start_time = time.monotonic()
-        token_tracker = _get_tracker(self.llm)
+        execution_llm = client_for_point(self.llm, ModelBindingPoint.EXECUTION.value)
+        token_tracker = _get_tracker(execution_llm)
         token_before = token_tracker.snapshot() if token_tracker else None
 
         experience_context = self._get_experience_context(task)
 
         loop = ReActLoop(
-            llm=client_for_point(self.llm, ModelBindingPoint.EXECUTION.value),
+            llm=execution_llm,
             constitution=constitution,
             observer=self.obs,
             shutdown_event=self._shutdown,
@@ -227,11 +228,16 @@ class AutonomousAgentV2:
         task.status = TaskStatus.EXECUTING.value
         self.store.update_task(task)
 
+        def persist_progress(state) -> None:
+            """Persist live execution metadata so dashboard polling stays accurate."""
+            self._persist_task_progress(task, state, task_start_time, token_tracker, token_before)
+
         success, trace, failure_reason = loop.run(
             task=task,
             workspace=self.workspace,
             directive=directive,
             experience_context=experience_context,
+            progress_callback=persist_progress,
         )
 
         task.execution_trace = serialize_trace(trace)
@@ -350,6 +356,17 @@ class AutonomousAgentV2:
             task.prompt_token_cost = snap_after["prompt_tokens"] - snap_before["prompt_tokens"]
             task.completion_token_cost = snap_after["completion_tokens"] - snap_before["completion_tokens"]
             task.token_cost = snap_after["total_tokens"] - snap_before["total_tokens"]
+
+    def _persist_task_progress(self, task: Task, state, start_time: float, tracker, snap_before) -> None:
+        """Write in-progress branch, PR, and token metadata back to the task row."""
+        branch_name = getattr(state, "branch_name", "")
+        pr_url = getattr(state, "pr_url", "")
+        if branch_name:
+            task.branch_name = branch_name
+        if pr_url:
+            task.pr_url = pr_url
+        self._finalize_costs(task, start_time, tracker, snap_before)
+        self.store.update_task(task)
 
     def _extract_and_store_learnings(self, task, outcome: str) -> None:
         if not self.exp_store:

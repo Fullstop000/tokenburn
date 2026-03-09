@@ -10,6 +10,9 @@ export interface TaskSummary {
   updated_at?: string
   branch_name?: string
   pr_url?: string
+  pr_number?: number
+  pr_status?: string
+  pr_title?: string
   prompt_token_cost?: number
   completion_token_cost?: number
   token_cost?: number
