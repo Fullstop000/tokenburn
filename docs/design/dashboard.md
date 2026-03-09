@@ -65,6 +65,18 @@ Three mutually exclusive modes, in priority order:
 2. `category=<name>` → filter by experience category
 3. (neither) → return most recent experiences
 
+## Work Surface Projections
+
+The Work pages consume task payloads that are slightly richer than the raw `Task`
+row:
+
+- task list and detail include best-effort PR metadata (`pr_number`, `pr_title`,
+  `pr_status`) when a task already has a `pr_url`
+- in-progress task token counters are expected to update during execution, not
+  only after terminal task completion
+- task detail is arranged as a review narrative: description first, then task
+  events, then deeper execution artifacts
+
 ## Human Help Center Flow
 
 The help center is the primary human-agent interaction point.

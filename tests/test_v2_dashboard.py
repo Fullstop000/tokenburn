@@ -66,6 +66,30 @@ class TestDashboardAPI(unittest.TestCase):
         self.assertEqual(len(result["tasks"]), 1)
         self.assertEqual(result["tasks"][0]["title"], "Test")
 
+    def test_api_tasks_includes_pr_status_metadata(self):
+        self.store.insert_task(Task(
+            id="t-pr",
+            title="Task with PR",
+            description="D",
+            source="manual",
+            status="completed",
+            priority=2,
+            pr_url="https://github.com/Fullstop000/sprout/pull/42",
+        ))
+
+        result = _api_tasks(
+            self.store,
+            pr_status_resolver=lambda _url: {
+                "pr_number": 42,
+                "pr_status": "merged",
+                "pr_title": "Fix dashboard tokens",
+            },
+        )
+
+        self.assertEqual(result["tasks"][0]["pr_number"], 42)
+        self.assertEqual(result["tasks"][0]["pr_status"], "merged")
+        self.assertEqual(result["tasks"][0]["pr_title"], "Fix dashboard tokens")
+
     def test_api_stats(self):
         self.store.insert_task(Task(
             id="t1", title="T", description="D", source="manual",
@@ -558,6 +582,31 @@ class TestTaskDetailAPI(unittest.TestCase):
         self.assertEqual(t["time_cost_seconds"], 67.8)
         self.assertIn("Always validate input", t["whats_learned"])
         self.assertIn("cycle_id", t)
+
+    def test_task_detail_includes_pr_status_metadata(self):
+        self.store.insert_task(Task(
+            id="full-pr",
+            title="Task with linked PR",
+            description="desc",
+            source="manual",
+            status="completed",
+            priority=2,
+            pr_url="https://github.com/Fullstop000/sprout/pull/77",
+        ))
+
+        result = _api_task_detail(
+            self.store,
+            "full-pr",
+            pr_status_resolver=lambda _url: {
+                "pr_number": 77,
+                "pr_status": "open",
+                "pr_title": "Show PR status",
+            },
+        )
+
+        self.assertEqual(result["task"]["pr_number"], 77)
+        self.assertEqual(result["task"]["pr_status"], "open")
+        self.assertEqual(result["task"]["pr_title"], "Show PR status")
 
     def test_task_detail_not_found(self):
         result = _api_task_detail(self.store, "nonexistent")
