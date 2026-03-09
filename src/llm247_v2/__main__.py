@@ -45,13 +45,16 @@ def _load_env() -> None:
         load_dotenv(dotenv_path=env_path, override=False)
     except ImportError:
         for line in env_path.read_text(encoding="utf-8").splitlines():
-            line = line.strip()
-            if not line or line.startswith("#") or "=" not in line:
-                continue
-            key, value = line.split("=", 1)
-            key, value = key.strip(), value.strip().strip("'\"")
-            if key and key not in os.environ:
-                os.environ[key] = value
+            try:
+                line = line.strip()
+                if not line or line.startswith("#") or "=" not in line:
+                    continue
+                key, value = line.split("=", 1)
+                key, value = key.strip(), value.strip().strip("'\"")
+                if key and key not in os.environ:
+                    os.environ[key] = value
+            except Exception as e:
+                logging.warning(f"Skipping malformed .env line: {line!r}, error: {str(e)}")
 
 
 class _ColoredFormatter(logging.Formatter):
