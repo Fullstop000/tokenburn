@@ -43,8 +43,10 @@ export function useControlPageState({
   const [modelRoocodeWrapper, setModelRoocodeWrapper] = useState(false)
   const [editingModelId, setEditingModelId] = useState('')
   const [deletingModelId, setDeletingModelId] = useState('')
+  const [settingDefaultModelId, setSettingDefaultModelId] = useState('')
   const [resolvingTaskId, setResolvingTaskId] = useState('')
   const [modelError, setModelError] = useState('')
+  const [modelsLoading, setModelsLoading] = useState(false)
 
   useEffect(() => {
     setSourcesJson(JSON.stringify(directive?.task_sources ?? {}, null, 2))
@@ -62,6 +64,7 @@ export function useControlPageState({
   }, [])
 
   const refreshModels = useCallback(async (): Promise<void> => {
+    setModelsLoading(true)
     try {
       const payload = await dashboardApiClient.getModels()
       setRegisteredModels(payload.models ?? [])
@@ -75,6 +78,8 @@ export function useControlPageState({
     } catch (error) {
       setModelError(friendlyLoadError('Model registry', error))
       throw error
+    } finally {
+      setModelsLoading(false)
     }
   }, [friendlyLoadError])
 
@@ -233,6 +238,24 @@ export function useControlPageState({
     }
   }, [deletingModelId, editingModelId, onRefreshSummary, refreshModels, resetModelForm, showToast])
 
+  const setDefaultModel = useCallback(async (model: RegisteredModelEntry): Promise<void> => {
+    if (settingDefaultModelId) return
+    setSettingDefaultModelId(model.id)
+    try {
+      const payload = await dashboardApiClient.setDefaultModel(model.id)
+      if (payload.error) {
+        showToast(payload.error, false)
+        return
+      }
+      showToast(`Default ${model.model_type} model updated`)
+      await Promise.all([refreshModels(), onRefreshSummary()])
+    } catch (error) {
+      showToast(`Set default model failed: ${String(error)}`, false)
+    } finally {
+      setSettingDefaultModelId('')
+    }
+  }, [onRefreshSummary, refreshModels, settingDefaultModelId, showToast])
+
   const saveModelBindings = useCallback(async (event: React.FormEvent<HTMLFormElement>): Promise<void> => {
     event.preventDefault()
     try {
@@ -263,6 +286,7 @@ export function useControlPageState({
     modelBindings,
     modelError,
     modelDesc,
+    modelsLoading,
     modelName,
     modelRoocodeWrapper,
     modelType,
@@ -274,6 +298,7 @@ export function useControlPageState({
     resolvingTaskId,
     saveDirective,
     saveModelBindings,
+    setDefaultModel,
     setInjectDescription,
     setInjectPriority,
     setInjectTitle,
@@ -285,6 +310,7 @@ export function useControlPageState({
     setModelName,
     setModelRoocodeWrapper,
     setModelType,
+    settingDefaultModelId,
     setSourcesJson,
     sourcesJson,
     startEditingModel,

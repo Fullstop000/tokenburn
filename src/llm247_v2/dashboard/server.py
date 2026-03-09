@@ -148,6 +148,9 @@ def serve_dashboard(
             if self.path == "/api/directive":
                 body = self._read_body()
                 self._serve_json(_api_set_directive(directive_path, body))
+            elif self.path.startswith("/api/models/") and self.path.endswith("/default"):
+                model_id = self.path.split("/api/models/")[1].split("/default")[0]
+                self._serve_json(_api_default_model(model_store, model_id))
             elif self.path == "/api/models":
                 body = self._read_body()
                 self._serve_json(_api_register_model(model_store, body))
@@ -615,6 +618,10 @@ def _api_models(
     """List registered models, runtime bindings, and binding-point metadata."""
     models = model_store.list_models() if model_store else []
     bindings = model_store.list_bindings() if model_store else {}
+    default_models_by_type = {
+        spec.model_type: model_store.get_default_model(spec.model_type) if model_store else None
+        for spec in MODEL_BINDING_SPECS
+    }
     return {
         "models": [
             _registered_model_row(
@@ -636,6 +643,8 @@ def _api_models(
                 "label": spec.label,
                 "description": spec.description,
                 "model_type": spec.model_type,
+                "default_model_id": default_models_by_type[spec.model_type].id if default_models_by_type[spec.model_type] else "",
+                "default_model_name": default_models_by_type[spec.model_type].model_name if default_models_by_type[spec.model_type] else "",
             }
             for spec in MODEL_BINDING_SPECS
         ],
@@ -701,6 +710,17 @@ def _api_update_model(model_store: Optional[ModelRegistryStore], model_id: str, 
     except ValueError as exc:
         return {"error": str(exc)}
     return {"status": "ok", "model": _registered_model_row(model)}
+
+
+def _api_default_model(model_store: Optional[ModelRegistryStore], model_id: str) -> dict:
+    """Persist one explicit default model selection."""
+    if model_store is None:
+        return {"error": "model registry unavailable"}
+    try:
+        model = model_store.set_default_model(model_id)
+    except ValueError as exc:
+        return {"error": str(exc)}
+    return {"status": "ok", "default_model": _registered_model_row(model)}
 
 
 def _api_delete_model(model_store: Optional[ModelRegistryStore], model_id: str) -> dict:

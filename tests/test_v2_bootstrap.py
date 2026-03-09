@@ -45,6 +45,20 @@ class TestBootstrapStatus(unittest.TestCase):
         self.assertTrue(args.with_ui)
         self.assertEqual(args.api_key_file, "/tmp/api_key.yaml")
 
+    def test_missing_api_key_file_is_ignored(self):
+        from llm247_v2.__main__ import _import_models_from_api_key_file
+
+        logger = mock.Mock()
+
+        imported = _import_models_from_api_key_file(
+            logger=logger,
+            model_store=self.store,
+            api_key_file="/tmp/does-not-exist-api_key.yaml",
+        )
+
+        self.assertEqual(imported, [])
+        logger.warning.assert_called_once()
+
 
 if __name__ == "__main__":
     unittest.main()

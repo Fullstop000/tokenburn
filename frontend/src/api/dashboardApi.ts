@@ -189,6 +189,13 @@ export class DashboardApiClient {
     })
   }
 
+  /** Persist one explicit default model selection for the model type. */
+  setDefaultModel(modelId: string): Promise<{ status?: string; default_model?: Record<string, unknown>; error?: string }> {
+    return this.requestJson(`/api/models/${encodeURIComponent(modelId)}/default`, {
+      method: 'POST',
+    })
+  }
+
   /** Persist selected model ids for runtime binding points. */
   saveModelBindings(payload: {
     bindings: Record<string, string>

@@ -35,6 +35,13 @@ CREATE TABLE IF NOT EXISTS model_bindings (
     FOREIGN KEY(model_id) REFERENCES registered_models(id)
 );
 
+CREATE TABLE IF NOT EXISTS default_models (
+    model_type TEXT PRIMARY KEY,
+    model_id TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    FOREIGN KEY(model_id) REFERENCES registered_models(id)
+);
+
 CREATE INDEX IF NOT EXISTS idx_registered_models_type ON registered_models(model_type);
 """
 
@@ -343,6 +350,10 @@ class ModelRegistryStore:
                 "DELETE FROM model_bindings WHERE model_id=?",
                 (clean_model_id,),
             )
+            self._conn.execute(
+                "DELETE FROM default_models WHERE model_id=?",
+                (clean_model_id,),
+            )
             self._conn.commit()
 
     def list_models(self, *, model_type: str = "") -> list[RegisteredModel]:
@@ -371,16 +382,50 @@ class ModelRegistryStore:
         return _row_to_registered_model(row) if row else None
 
     def get_default_model(self, model_type: str = ModelType.LLM.value) -> Optional[RegisteredModel]:
-        """Return the latest registered model for one type."""
+        """Return the selected default model, or fall back to the latest registered model."""
         with self._lock:
             row = self._conn.execute(
-                """SELECT * FROM registered_models
-                   WHERE model_type=?
-                   ORDER BY created_at DESC
+                """SELECT rm.* FROM default_models dm
+                   JOIN registered_models rm ON rm.id = dm.model_id
+                   WHERE dm.model_type=?
                    LIMIT 1""",
                 (model_type,),
             ).fetchone()
+            if row is None:
+                row = self._conn.execute(
+                    """SELECT * FROM registered_models
+                       WHERE model_type=?
+                       ORDER BY created_at DESC
+                       LIMIT 1""",
+                    (model_type,),
+                ).fetchone()
         return _row_to_registered_model(row) if row else None
+
+    def set_default_model(self, model_id: str) -> RegisteredModel:
+        """Persist one explicit default model selection for its model type."""
+        clean_model_id = str(model_id).strip()
+        if not clean_model_id:
+            raise ValueError("model_id is required")
+
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT * FROM registered_models WHERE id=?",
+                (clean_model_id,),
+            ).fetchone()
+            if not row:
+                raise ValueError(f"unknown model_id: {model_id}")
+
+            model = _row_to_registered_model(row)
+            self._conn.execute(
+                """INSERT INTO default_models (model_type, model_id, updated_at)
+                   VALUES (?, ?, ?)
+                   ON CONFLICT(model_type) DO UPDATE SET
+                     model_id=excluded.model_id,
+                     updated_at=excluded.updated_at""",
+                (model.model_type, model.id, _now_iso()),
+            )
+            self._conn.commit()
+        return model
 
     def set_binding(self, binding_point: str, model_id: str) -> None:
         """Bind one runtime point to a model, or clear it when model_id is empty."""

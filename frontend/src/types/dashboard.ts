@@ -123,6 +123,8 @@ export interface ModelBindingPointEntry {
   label: string
   description: string
   model_type: 'llm' | 'embedding'
+  default_model_id: string
+  default_model_name: string
 }
 
 /** Saved model selection for one binding point. */

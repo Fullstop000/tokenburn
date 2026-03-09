@@ -133,31 +133,47 @@ cleanup_vite() {
 
 COMMAND="${1:-help}"
 API_KEY_FILE="${2:-}"
-API_KEY_ARGS=()
 if [[ -n "$API_KEY_FILE" ]]; then
     if [[ ! -f "$API_KEY_FILE" ]]; then
-        echo "error: api key file not found: $API_KEY_FILE" >&2
-        exit 1
+        echo "warning: api key file not found, skipping import: $API_KEY_FILE" >&2
     fi
-    API_KEY_ARGS=(--api-key-file "$API_KEY_FILE")
 fi
+
+# Run llm247_v2 without expanding an empty bash array under `set -u`.
+run_llm247_exec() {
+    local args=("$@")
+    if [[ -n "$API_KEY_FILE" && -f "$API_KEY_FILE" ]]; then
+        PYTHONPATH=src exec python3 -m llm247_v2 "${args[@]}" --api-key-file "$API_KEY_FILE"
+    else
+        PYTHONPATH=src exec python3 -m llm247_v2 "${args[@]}"
+    fi
+}
+
+run_llm247_bg() {
+    local args=("$@")
+    if [[ -n "$API_KEY_FILE" && -f "$API_KEY_FILE" ]]; then
+        PYTHONPATH=src python3 -m llm247_v2 "${args[@]}" --api-key-file "$API_KEY_FILE" &
+    else
+        PYTHONPATH=src python3 -m llm247_v2 "${args[@]}" &
+    fi
+}
 
 case "$COMMAND" in
     agent)
         echo "Starting Sprout Agent V2..."
-        PYTHONPATH=src exec python3 -m llm247_v2 "${API_KEY_ARGS[@]}"
+        run_llm247_exec
         ;;
 
     ui)
         ensure_frontend_assets
         echo "Starting Dashboard UI (production) on http://127.0.0.1:${UI_PORT:-8787}"
-        PYTHONPATH=src exec python3 -m llm247_v2 --ui --ui-port "${UI_PORT:-8787}" "${API_KEY_ARGS[@]}"
+        run_llm247_exec --ui --ui-port "${UI_PORT:-8787}"
         ;;
 
     both)
         ensure_frontend_assets
         echo "Starting Agent + Dashboard (production) on http://127.0.0.1:${UI_PORT:-8787}"
-        PYTHONPATH=src exec python3 -m llm247_v2 --with-ui --ui-port "${UI_PORT:-8787}" "${API_KEY_ARGS[@]}"
+        run_llm247_exec --with-ui --ui-port "${UI_PORT:-8787}"
         ;;
 
     ui-dev)
@@ -167,7 +183,7 @@ case "$COMMAND" in
 
         # Start Python API backend (skips frontend serving; Vite handles that)
         echo "Starting Python API backend on http://127.0.0.1:${UI_PORT:-8787}"
-        PYTHONPATH=src python3 -m llm247_v2 --ui --ui-port "${UI_PORT:-8787}" "${API_KEY_ARGS[@]}" &
+        run_llm247_bg --ui --ui-port "${UI_PORT:-8787}"
         BACKEND_PID=$!
 
         # Give backend a moment to bind the port
@@ -192,7 +208,7 @@ case "$COMMAND" in
 
         # Start agent + API backend
         echo "Starting Agent + API backend on http://127.0.0.1:${UI_PORT:-8787}"
-        PYTHONPATH=src python3 -m llm247_v2 --with-ui --ui-port "${UI_PORT:-8787}" "${API_KEY_ARGS[@]}" &
+        run_llm247_bg --with-ui --ui-port "${UI_PORT:-8787}"
         BACKEND_PID=$!
 
         sleep 1
@@ -210,7 +226,7 @@ case "$COMMAND" in
 
     once)
         echo "Running single agent cycle..."
-        PYTHONPATH=src exec python3 -m llm247_v2 --once "${API_KEY_ARGS[@]}"
+        run_llm247_exec --once
         ;;
 
     test)

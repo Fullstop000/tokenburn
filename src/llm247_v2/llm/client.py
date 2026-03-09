@@ -317,36 +317,51 @@ class RoutedLLMClient:
         default_client: LLMClient,
         binding_resolver: Callable[[str], RegisteredModel | None],
         client_factory: Callable[[RegisteredModel], LLMClient],
+        default_resolver: Callable[[], RegisteredModel | None] | None = None,
     ) -> None:
         self._default_client = default_client
         self._binding_resolver = binding_resolver
         self._client_factory = client_factory
+        self._default_resolver = default_resolver
         self._clients: dict[str, LLMClient] = {}
         self.tracker = getattr(default_client, "tracker", None)
 
     def generate(self, prompt: str) -> str:
-        return self._default_client.generate(prompt)
+        return self._current_default_client().generate(prompt)
 
     def generate_tracked(self, prompt: str) -> Tuple[str, UsageInfo]:
-        return self._default_client.generate_tracked(prompt)
+        return self._current_default_client().generate_tracked(prompt)
 
     def generate_with_tools(
         self,
         messages: list[dict],
         tools: list[dict],
     ) -> Tuple[str | None, list[ToolCall], UsageInfo]:
-        return self._default_client.generate_with_tools(messages, tools)
+        return self._current_default_client().generate_with_tools(messages, tools)
 
-    def for_point(self, binding_point: str) -> LLMClient:
-        """Return the client bound to one runtime point, or the default client."""
-        model = self._binding_resolver(binding_point)
-        if model is None:
-            return self._default_client
+    def _client_for_model(self, model: RegisteredModel) -> LLMClient:
+        """Reuse one client per registered model id."""
         client = self._clients.get(model.id)
         if client is None:
             client = self._client_factory(model)
             self._clients[model.id] = client
         return client
+
+    def _current_default_client(self) -> LLMClient:
+        """Resolve the current default client, or fall back to the startup client."""
+        if self._default_resolver is None:
+            return self._default_client
+        model = self._default_resolver()
+        if model is None:
+            return self._default_client
+        return self._client_for_model(model)
+
+    def for_point(self, binding_point: str) -> LLMClient:
+        """Return the client bound to one runtime point, or the default client."""
+        model = self._binding_resolver(binding_point)
+        if model is None:
+            return self._current_default_client()
+        return self._client_for_model(model)
 
 
 def client_for_point(client: LLMClient, binding_point: str) -> LLMClient:

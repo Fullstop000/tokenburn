@@ -8,6 +8,7 @@ from pathlib import Path
 
 from llm247_v2.dashboard.server import (
     _api_bootstrap_status,
+    _api_default_model,
     _api_discovery,
     _api_delete_model,
     _api_experiences,
@@ -266,6 +267,32 @@ class TestDashboardAPI(unittest.TestCase):
         self.assertEqual(payload["bindings"][ModelBindingPoint.EXECUTION.value]["model_id"], model.id)
         self.assertTrue(any(item["binding_point"] == ModelBindingPoint.EXECUTION.value for item in payload["binding_points"]))
 
+    def test_models_api_includes_effective_default_model_for_binding_points(self):
+        model = self.model_store.register_model(
+            model_type=ModelType.LLM.value,
+            base_url="https://example.com/v1",
+            model_name="planner-model",
+            api_key="secret-ak",
+            desc="Primary planner model",
+        )
+
+        payload = _api_models(self.model_store)
+        execution_binding = next(
+            item for item in payload["binding_points"] if item["binding_point"] == ModelBindingPoint.EXECUTION.value
+        )
+
+        self.assertEqual(execution_binding["default_model_id"], model.id)
+        self.assertEqual(execution_binding["default_model_name"], "planner-model")
+
+    def test_models_api_returns_empty_default_model_when_none_exists(self):
+        payload = _api_models(self.model_store)
+        execution_binding = next(
+            item for item in payload["binding_points"] if item["binding_point"] == ModelBindingPoint.EXECUTION.value
+        )
+
+        self.assertEqual(execution_binding["default_model_id"], "")
+        self.assertEqual(execution_binding["default_model_name"], "")
+
     def test_models_api_includes_connection_status(self):
         self.model_store.register_model(
             model_type=ModelType.LLM.value,
@@ -303,6 +330,21 @@ class TestDashboardAPI(unittest.TestCase):
 
         self.assertEqual(payload["status"], "ok")
         self.assertEqual(payload["bindings"][ModelBindingPoint.EXECUTION.value]["model_id"], model.id)
+
+    def test_set_default_model_api_updates_effective_default(self):
+        model = self.model_store.register_model(
+            model_type=ModelType.LLM.value,
+            base_url="https://example.com/v1",
+            model_name="planner-model",
+            api_key="secret-ak",
+            desc="Primary planner model",
+        )
+
+        payload = _api_default_model(self.model_store, model.id)
+
+        self.assertEqual(payload["status"], "ok")
+        self.assertEqual(payload["default_model"]["id"], model.id)
+        self.assertEqual(self.model_store.get_default_model(ModelType.LLM.value).id, model.id)
 
     def test_update_model_api_updates_existing_model(self):
         model = self.model_store.register_model(

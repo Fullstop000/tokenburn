@@ -119,6 +119,43 @@ class TestModelRegistryStore(unittest.TestCase):
         self.assertEqual(default_model.id, second.id)
         self.assertNotEqual(default_model.id, first.id)
 
+    def test_set_default_model_overrides_latest_registered_fallback(self):
+        first = self.store.register_model(
+            model_type=ModelType.LLM.value,
+            base_url="https://example.com/v1",
+            model_name="older-model",
+            api_key="secret-ak-1",
+            desc="Older",
+        )
+        self.store.register_model(
+            model_type=ModelType.LLM.value,
+            base_url="https://example.com/v2",
+            model_name="newer-model",
+            api_key="secret-ak-2",
+            desc="Newer",
+        )
+
+        self.store.set_default_model(first.id)
+
+        default_model = self.store.get_default_model(ModelType.LLM.value)
+
+        self.assertIsNotNone(default_model)
+        self.assertEqual(default_model.id, first.id)
+
+    def test_delete_model_clears_default_model_selection(self):
+        model = self.store.register_model(
+            model_type=ModelType.LLM.value,
+            base_url="https://example.com/v1",
+            model_name="planner-model",
+            api_key="secret-ak",
+            desc="Planner model",
+        )
+
+        self.store.set_default_model(model.id)
+        self.store.delete_model(model.id)
+
+        self.assertIsNone(self.store.get_default_model(ModelType.LLM.value))
+
     def test_clear_binding(self):
         model = self.store.register_model(
             model_type=ModelType.LLM.value,

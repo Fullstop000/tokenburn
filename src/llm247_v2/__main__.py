@@ -109,6 +109,23 @@ def parse_args() -> argparse.Namespace:
     return p.parse_args()
 
 
+def _import_models_from_api_key_file(logger, model_store, api_key_file: str | None):
+    """Import models from one api_key.yaml file when it is present."""
+    if not api_key_file:
+        return []
+
+    from llm247_v2.startup.api_key_import import import_api_key_file
+
+    resolved_path = Path(api_key_file).expanduser().resolve()
+    if not resolved_path.exists():
+        logger.warning("API key file not found, skipping import: %s", resolved_path)
+        return []
+
+    imported_models = import_api_key_file(model_store, resolved_path)
+    logger.info("Imported %d model(s) from %s", len(imported_models), resolved_path)
+    return imported_models
+
+
 def main() -> int:
     _load_env()
     args = parse_args()
@@ -134,17 +151,7 @@ def main() -> int:
     store = TaskStore(db_path)
     model_store = ModelRegistryStore(models_db_path)
 
-    if args.api_key_file:
-        from llm247_v2.startup.api_key_import import import_api_key_file
-
-        api_key_file = Path(args.api_key_file).expanduser().resolve()
-        if not api_key_file.exists():
-            logger.error("API key file not found: %s", api_key_file)
-            model_store.close()
-            store.close()
-            return 2
-        imported_models = import_api_key_file(model_store, api_key_file)
-        logger.info("Imported %d model(s) from %s", len(imported_models), api_key_file)
+    _import_models_from_api_key_file(logger, model_store, args.api_key_file)
 
     bootstrap = _bootstrap_status(model_store)
 
@@ -246,6 +253,7 @@ def main() -> int:
             tracker=shared_tracker,
             roocode_wrapper=registered_model.roocode_wrapper,
         ),
+        default_resolver=lambda: model_store.get_default_model(),
     )
     observer = create_default_observer(state_dir, store=store, console=True)
     shutdown_event = threading.Event()

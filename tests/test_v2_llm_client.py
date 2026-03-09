@@ -191,6 +191,43 @@ class TestRoutedLLMClient(unittest.TestCase):
         self.assertEqual(result, "default")
         self.assertEqual(default_client.prompts, ["score this"])
 
+    def test_unbound_point_uses_latest_default_model_after_runtime_switch(self):
+        fallback_client = FakePointLLM("fallback")
+        selected_model = {"id": "m1", "name": "model-one"}
+        created_clients: dict[str, FakePointLLM] = {}
+
+        def default_resolver():
+            return RegisteredModel(
+                id=selected_model["id"],
+                model_type="llm",
+                base_url="https://example.com/v1",
+                model_name=selected_model["name"],
+                api_key="secret-ak",
+            )
+
+        def client_factory(model: RegisteredModel):
+            client = FakePointLLM(model.model_name)
+            created_clients[model.id] = client
+            return client
+
+        routed = RoutedLLMClient(
+            default_client=fallback_client,
+            binding_resolver=lambda point: None,
+            client_factory=client_factory,
+            default_resolver=default_resolver,
+        )
+
+        first_result = routed.for_point(ModelBindingPoint.TASK_VALUE.value).generate("score one")
+        selected_model["id"] = "m2"
+        selected_model["name"] = "model-two"
+        second_result = routed.for_point(ModelBindingPoint.TASK_VALUE.value).generate("score two")
+
+        self.assertEqual(first_result, "model-one")
+        self.assertEqual(second_result, "model-two")
+        self.assertEqual(created_clients["m1"].prompts, ["score one"])
+        self.assertEqual(created_clients["m2"].prompts, ["score two"])
+        self.assertEqual(fallback_client.prompts, [])
+
 
 class TestProbeRegisteredModelConnection(unittest.TestCase):
     @patch("llm247_v2.llm.client.urllib.request.urlopen")
